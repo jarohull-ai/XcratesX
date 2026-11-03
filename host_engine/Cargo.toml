@@ -1,0 +1,13 @@
+[package]
+name = "host_engine"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "host_engine"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.29"
+ratatui = "0.30"
+shared_contract = { path = "../shared_contract" }
