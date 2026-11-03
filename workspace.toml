@@ -24,6 +24,12 @@ description = "Generator tekstu (stub)"
 
 [[slot]]
 key = "5"
+label = "SCOUT"
+binary = "plugin_crate_scout"
+description = "Wyszukiwarka crates.io — szukaj, porownuj, wybieraj crate'y"
+
+[[slot]]
+key = "6"
 label = "MUSIC"
 binary = "plugin_music"
 description = "Symulacja odtwarzacza (stub)"

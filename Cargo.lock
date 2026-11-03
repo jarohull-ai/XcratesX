@@ -1408,6 +1408,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin_crate_scout"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shared_contract",
+ "tokio",
+]
+
+[[package]]
 name = "plugin_crucible"
 version = "0.1.0"
 dependencies = [
