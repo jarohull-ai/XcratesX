@@ -285,6 +285,37 @@ impl Engine {
         }
     }
 
+    fn reload_config(&mut self) {
+        let new_plugins = load_plugins();
+
+        if new_plugins.is_empty() {
+            self.fault = Some("Reload: brak slotow w workspace.toml".into());
+            return;
+        }
+
+        let current_binary = self.active().binary.clone();
+        self.stop_plugin();
+        self.plugins = new_plugins;
+
+        self.active_index = self
+            .plugins
+            .iter()
+            .position(|p| p.binary == current_binary)
+            .unwrap_or(0);
+
+        self.message = Some(JfpMessage::reply(
+            "OK",
+            format!(
+                "CONFIG RELOAD | Zaladowano {} slotow z workspace.toml",
+                self.plugins.len()
+            ),
+        ));
+        self.tick_count = 0;
+        self.frames = 0;
+        self.scroll_offset = 0;
+        self.start_plugin();
+    }
+
     fn switch_by_key(&mut self, key: char) {
         let Some(index) = self.plugins.iter().position(|p| p.key == key) else {
             return;
@@ -417,6 +448,10 @@ impl Engine {
                 false
             }
             KeyCode::Char('q') if !self.command_mode => true,
+            KeyCode::Char('r') if !self.command_mode => {
+                self.reload_config();
+                false
+            }
             KeyCode::Char(character) if self.command_mode => {
                 if !character.is_control() {
                     self.input_buffer.push(character);
@@ -476,7 +511,7 @@ impl Engine {
             .join(" ");
 
         format!(
-            "{} | {} | tick:{} rx:{} pid:{} | {} | q:quit",
+            "{} | {} | tick:{} rx:{} pid:{} | {} | r:reload q:quit",
             self.active().label,
             self.status(),
             self.tick_count,
