@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::{self, BufReader, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -16,44 +17,114 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
+use serde::Deserialize;
 use shared_contract::{JfpMessage, JfpReader, JFP_VERSION};
 
 type Backend = CrosstermBackend<Stdout>;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct PluginSpec {
-    binary: &'static str,
-    label: &'static str,
+    binary: String,
+    label: String,
     key: char,
+    description: String,
 }
 
-const PLUGINS: [PluginSpec; 5] = [
-    PluginSpec {
-        binary: "plugin_osint",
-        label: "OSINT",
-        key: '1',
-    },
-    PluginSpec {
-        binary: "plugin_music",
-        label: "MUSIC",
-        key: '2',
-    },
-    PluginSpec {
-        binary: "plugin_writing",
-        label: "WRITING",
-        key: '3',
-    },
-    PluginSpec {
-        binary: "plugin_audio",
-        label: "AUDIO",
-        key: '4',
-    },
-    PluginSpec {
-        binary: "plugin_crucible",
-        label: "CRUCIBLE",
-        key: '5',
-    },
-];
+#[derive(Deserialize)]
+struct ConfigFile {
+    slot: Vec<SlotEntry>,
+}
+
+#[derive(Deserialize)]
+struct SlotEntry {
+    key: String,
+    label: String,
+    binary: String,
+    #[serde(default)]
+    description: String,
+}
+
+fn load_plugins() -> Vec<PluginSpec> {
+    let config_path = config_path();
+
+    if let Ok(content) = fs::read_to_string(&config_path) {
+        if let Ok(config) = toml::from_str::<ConfigFile>(&content) {
+            let plugins: Vec<PluginSpec> = config
+                .slot
+                .into_iter()
+                .filter_map(|entry| {
+                    let key = entry.key.chars().next()?;
+                    Some(PluginSpec {
+                        binary: entry.binary,
+                        label: entry.label,
+                        key,
+                        description: entry.description,
+                    })
+                })
+                .collect();
+
+            if !plugins.is_empty() {
+                return plugins;
+            }
+        }
+    }
+
+    default_plugins()
+}
+
+fn default_plugins() -> Vec<PluginSpec> {
+    vec![
+        PluginSpec {
+            binary: "plugin_osint".into(),
+            label: "OSINT".into(),
+            key: '1',
+            description: String::new(),
+        },
+        PluginSpec {
+            binary: "plugin_search".into(),
+            label: "SEARCH".into(),
+            key: '2',
+            description: String::new(),
+        },
+        PluginSpec {
+            binary: "plugin_audio".into(),
+            label: "AUDIO".into(),
+            key: '3',
+            description: String::new(),
+        },
+        PluginSpec {
+            binary: "plugin_writing".into(),
+            label: "WRITING".into(),
+            key: '4',
+            description: String::new(),
+        },
+        PluginSpec {
+            binary: "plugin_music".into(),
+            label: "MUSIC".into(),
+            key: '5',
+            description: String::new(),
+        },
+        PluginSpec {
+            binary: "plugin_crucible".into(),
+            label: "CRUCIBLE".into(),
+            key: '9',
+            description: String::new(),
+        },
+    ]
+}
+
+fn config_path() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = dir.join("../../workspace.toml");
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+
+    PathBuf::from("workspace.toml")
+}
 
 fn read_frames(stdout: ChildStdout, sender: Sender<JfpMessage>) {
     let mut reader = JfpReader::new(BufReader::new(stdout));
@@ -146,7 +217,8 @@ impl Drop for PluginProcess {
 
 struct Engine {
     target: PathBuf,
-    active: PluginSpec,
+    plugins: Vec<PluginSpec>,
+    active_index: usize,
     process: Option<PluginProcess>,
     message: Option<JfpMessage>,
     fault: Option<String>,
@@ -155,13 +227,16 @@ struct Engine {
     input_buffer: String,
     command_mode: bool,
     hold_ticks: u8,
+    scroll_offset: u16,
+    body_height: u16,
 }
 
 impl Engine {
-    fn new() -> Self {
+    fn new(plugins: Vec<PluginSpec>) -> Self {
         let mut engine = Self {
             target: target_dir(),
-            active: PLUGINS[0],
+            active_index: 0,
+            plugins,
             process: None,
             message: None,
             fault: None,
@@ -170,14 +245,20 @@ impl Engine {
             input_buffer: String::new(),
             command_mode: false,
             hold_ticks: 0,
+            scroll_offset: 0,
+            body_height: 24,
         };
 
         engine.start_plugin();
         engine
     }
 
+    fn active(&self) -> &PluginSpec {
+        &self.plugins[self.active_index]
+    }
+
     fn start_plugin(&mut self) {
-        let path = self.target.join(self.active.binary);
+        let path = self.target.join(&self.active().binary);
 
         match PluginProcess::spawn(&path) {
             Ok(process) => {
@@ -204,34 +285,25 @@ impl Engine {
         }
     }
 
-    fn switch_plugin(&mut self, name: &str) {
-        let Some(spec) = PLUGINS.iter().copied().find(|plugin| plugin.binary == name) else {
-            self.fault = Some(format!("nieznana wtyczka: {name}"));
+    fn switch_by_key(&mut self, key: char) {
+        let Some(index) = self.plugins.iter().position(|p| p.key == key) else {
             return;
         };
 
-        if self.process.is_some() && self.active == spec {
+        if self.process.is_some() && self.active_index == index {
             return;
         }
 
         self.stop_plugin();
-        self.active = spec;
+        self.active_index = index;
         self.message = None;
         self.tick_count = 0;
         self.frames = 0;
         self.input_buffer.clear();
         self.command_mode = false;
         self.hold_ticks = 0;
+        self.scroll_offset = 0;
         self.start_plugin();
-    }
-
-    fn rapid_fire(&mut self) {
-        const SEQUENCE: [&str; 2] = ["plugin_osint", "plugin_audio"];
-
-        for index in 0..20 {
-            self.switch_plugin(SEQUENCE[index % SEQUENCE.len()]);
-            thread::sleep(Duration::from_millis(10));
-        }
     }
 
     fn tick(&mut self) {
@@ -304,14 +376,12 @@ impl Engine {
                     self.submit_command();
                     self.command_mode = false;
                 }
-
                 false
             }
             KeyCode::Backspace => {
                 if self.command_mode {
                     self.input_buffer.pop();
                 }
-
                 false
             }
             KeyCode::Esc => {
@@ -322,25 +392,43 @@ impl Engine {
                     true
                 }
             }
-            KeyCode::Char('q') if !self.command_mode => true,
-            KeyCode::Char('6') if !self.command_mode => {
-                self.rapid_fire();
+            KeyCode::Up if !self.command_mode => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(1);
                 false
             }
+            KeyCode::Down if !self.command_mode => {
+                self.scroll_offset = self.scroll_offset.saturating_add(1);
+                false
+            }
+            KeyCode::PageUp if !self.command_mode => {
+                self.scroll_offset = self
+                    .scroll_offset
+                    .saturating_sub(self.body_height.saturating_sub(2));
+                false
+            }
+            KeyCode::PageDown if !self.command_mode => {
+                self.scroll_offset = self
+                    .scroll_offset
+                    .saturating_add(self.body_height.saturating_sub(2));
+                false
+            }
+            KeyCode::Home if !self.command_mode => {
+                self.scroll_offset = 0;
+                false
+            }
+            KeyCode::Char('q') if !self.command_mode => true,
             KeyCode::Char(character) if self.command_mode => {
                 if !character.is_control() {
                     self.input_buffer.push(character);
                 }
-
                 false
             }
             _ => {
                 if !self.command_mode {
-                    if let Some(name) = plugin_for_key(code) {
-                        self.switch_plugin(name);
+                    if let KeyCode::Char(ch) = code {
+                        self.switch_by_key(ch);
                     }
                 }
-
                 false
             }
         }
@@ -365,7 +453,7 @@ impl Engine {
 
     fn body(&self) -> String {
         if let Some(fault) = &self.fault {
-            return format!("{}: BLAD. {fault}", self.active.label);
+            return format!("{}: BLAD. {fault}", self.active().label);
         }
 
         match &self.message {
@@ -380,20 +468,21 @@ impl Engine {
             None => String::from("-"),
         };
 
-        let keys = PLUGINS
+        let keys: String = self
+            .plugins
             .iter()
-            .map(|plugin| format!("{}:{}", plugin.key, plugin.label.to_lowercase()))
+            .map(|p| format!("{}:{}", p.key, p.label.to_lowercase()))
             .collect::<Vec<_>>()
             .join(" ");
 
         format!(
-            "{} | {} | tick: {} | rx: {} | pid: {} | {} | 6:rapid | q:quit",
-            self.active.label,
+            "{} | {} | tick:{} rx:{} pid:{} | {} | q:quit",
+            self.active().label,
             self.status(),
             self.tick_count,
             self.frames,
             pid,
-            keys
+            keys,
         )
     }
 }
@@ -401,9 +490,7 @@ impl Engine {
 fn target_dir() -> PathBuf {
     if let Ok(executable) = std::env::current_exe() {
         if let Some(dir) = executable.parent() {
-            if dir.join(PLUGINS[0].binary).exists() {
-                return dir.to_path_buf();
-            }
+            return dir.to_path_buf();
         }
     }
 
@@ -432,17 +519,24 @@ fn frame_color(status: &str) -> Color {
     }
 }
 
-fn render(frame: &mut Frame, engine: &Engine) {
+fn render(frame: &mut Frame, engine: &mut Engine) {
     let [output_area, command_area] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(frame.area());
 
     let status = engine.status();
     let color = frame_color(status);
 
+    let scroll_hint = if engine.scroll_offset > 0 {
+        format!(" [scroll:{}]", engine.scroll_offset)
+    } else {
+        String::new()
+    };
+
     let block = Block::default()
         .title(format!(
-            "JFP SILNIK :: {} :: {} :: {JFP_VERSION}",
-            engine.active.label, status
+            "JFP SILNIK :: {} :: {} :: {JFP_VERSION}{scroll_hint}",
+            engine.active().label,
+            status,
         ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -454,8 +548,12 @@ fn render(frame: &mut Frame, engine: &Engine) {
     let [body_area, footer_area] =
         Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
 
+    engine.body_height = body_area.height;
+
     frame.render_widget(
-        Paragraph::new(engine.body()).wrap(Wrap { trim: false }),
+        Paragraph::new(engine.body())
+            .wrap(Wrap { trim: false })
+            .scroll((engine.scroll_offset, 0)),
         body_area,
     );
 
@@ -505,17 +603,6 @@ fn render(frame: &mut Frame, engine: &Engine) {
     }
 }
 
-fn plugin_for_key(code: KeyCode) -> Option<&'static str> {
-    match code {
-        KeyCode::Char('1') => Some("plugin_osint"),
-        KeyCode::Char('2') => Some("plugin_music"),
-        KeyCode::Char('3') => Some("plugin_writing"),
-        KeyCode::Char('4') => Some("plugin_audio"),
-        KeyCode::Char('5') => Some("plugin_crucible"),
-        _ => None,
-    }
-}
-
 fn run(terminal: &mut Terminal<Backend>, engine: &mut Engine) -> io::Result<()> {
     loop {
         engine.tick();
@@ -538,7 +625,14 @@ fn run(terminal: &mut Terminal<Backend>, engine: &mut Engine) -> io::Result<()> 
 }
 
 fn main() -> io::Result<()> {
-    let mut engine = Engine::new();
+    let plugins = load_plugins();
+
+    if plugins.is_empty() {
+        eprintln!("Brak slotow w workspace.toml i brak domyslnych wtyczek.");
+        return Ok(());
+    }
+
+    let mut engine = Engine::new(plugins);
     let mut terminal = init_terminal()?;
     let result = run(&mut terminal, &mut engine);
     engine.stop_plugin();

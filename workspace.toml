@@ -1,0 +1,35 @@
+[[slot]]
+key = "1"
+label = "OSINT"
+binary = "plugin_osint"
+description = "Skanowanie IP/domen (reqwest + ip-api.com)"
+
+[[slot]]
+key = "2"
+label = "SEARCH"
+binary = "plugin_search"
+description = "Web scraper — pobiera strone i wyciaga strukture"
+
+[[slot]]
+key = "3"
+label = "AUDIO"
+binary = "plugin_audio"
+description = "Analiza plikow WAV (hound)"
+
+[[slot]]
+key = "4"
+label = "WRITING"
+binary = "plugin_writing"
+description = "Generator tekstu (stub)"
+
+[[slot]]
+key = "5"
+label = "MUSIC"
+binary = "plugin_music"
+description = "Symulacja odtwarzacza (stub)"
+
+[[slot]]
+key = "9"
+label = "CRUCIBLE"
+binary = "plugin_crucible"
+description = "Stress-test: celowy crash po 6 tickach"

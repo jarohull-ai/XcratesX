@@ -7,5 +7,6 @@ members = [
     "plugin_writing",
     "plugin_audio",
     "plugin_crucible",
+    "plugin_search",
 ]
 resolver = "2"
