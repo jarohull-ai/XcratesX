@@ -1,0 +1,19 @@
+[[preset]]
+name = "DevOps"
+description = "Skanowanie sieci, monitoring, szukanie crate'ów"
+slots = ["plugin_osint", "plugin_crate_scout", "plugin_sysinfo"]
+
+[[preset]]
+name = "Audio"
+description = "Analiza WAV, metadane audio"
+slots = ["plugin_audio", "plugin_media_meta"]
+
+[[preset]]
+name = "Recon"
+description = "OSINT, web scraping, przeszukiwanie"
+slots = ["plugin_osint", "plugin_search", "plugin_crate_scout"]
+
+[[preset]]
+name = "Wszystko"
+description = "Wszystkie zainstalowane pluginy"
+slots = []

@@ -18,9 +18,9 @@ description = "Analiza plikow WAV (hound)"
 
 [[slot]]
 key = "4"
-label = "WRITING"
-binary = "plugin_writing"
-description = "Generator tekstu (stub)"
+label = "SYSINFO"
+binary = "plugin_sysinfo"
+description = "Monitor systemu — CPU, RAM, dyski, siec, procesy (sysinfo)"
 
 [[slot]]
 key = "5"
@@ -30,9 +30,9 @@ description = "Wyszukiwarka crates.io — szukaj, porownuj, wybieraj crate'y"
 
 [[slot]]
 key = "6"
-label = "MUSIC"
-binary = "plugin_music"
-description = "Symulacja odtwarzacza (stub)"
+label = "MEDIA"
+binary = "plugin_media_meta"
+description = "Metadane audio — tagi MP3/FLAC/WAV/OGG (lofty)"
 
 [[slot]]
 key = "9"

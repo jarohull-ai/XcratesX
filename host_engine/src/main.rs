@@ -12,8 +12,8 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Style};
+use ratatui::layout::{Alignment, Constraint, Layout};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
@@ -21,6 +21,64 @@ use serde::Deserialize;
 use shared_contract::{JfpMessage, JfpReader, JFP_VERSION};
 
 type Backend = CrosstermBackend<Stdout>;
+
+// --- Presets ---
+
+#[derive(Deserialize, Clone)]
+struct PresetEntry {
+    name: String,
+    description: String,
+    #[serde(default)]
+    slots: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct PresetsFile {
+    preset: Vec<PresetEntry>,
+}
+
+fn presets_path() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = dir.join("../../presets.toml");
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+    PathBuf::from("presets.toml")
+}
+
+fn load_presets() -> Vec<PresetEntry> {
+    let path = presets_path();
+    if let Ok(content) = fs::read_to_string(&path) {
+        if let Ok(file) = toml::from_str::<PresetsFile>(&content) {
+            if !file.preset.is_empty() {
+                return file.preset;
+            }
+        }
+    }
+    vec![PresetEntry {
+        name: "Wszystko".into(),
+        description: "Wszystkie zainstalowane pluginy".into(),
+        slots: vec![],
+    }]
+}
+
+fn plugins_for_preset(preset: &PresetEntry) -> Vec<PluginSpec> {
+    let all = load_plugins();
+    if preset.slots.is_empty() {
+        return all;
+    }
+    all.into_iter()
+        .filter(|p| preset.slots.contains(&p.binary))
+        .collect()
+}
+
+enum RunResult {
+    Quit,
+    BackToPresets,
+}
 
 #[derive(Clone, PartialEq, Eq)]
 struct PluginSpec {
@@ -215,6 +273,12 @@ impl Drop for PluginProcess {
     }
 }
 
+enum KeyAction {
+    Continue,
+    Quit,
+    Presets,
+}
+
 struct Engine {
     target: PathBuf,
     plugins: Vec<PluginSpec>,
@@ -396,67 +460,68 @@ impl Engine {
         }
     }
 
-    fn handle_key(&mut self, code: KeyCode) -> bool {
+    fn handle_key(&mut self, code: KeyCode) -> KeyAction {
         match code {
             KeyCode::Tab => {
                 self.command_mode = !self.command_mode;
-                false
+                KeyAction::Continue
             }
             KeyCode::Enter => {
                 if self.command_mode {
                     self.submit_command();
                     self.command_mode = false;
                 }
-                false
+                KeyAction::Continue
             }
             KeyCode::Backspace => {
                 if self.command_mode {
                     self.input_buffer.pop();
                 }
-                false
+                KeyAction::Continue
             }
             KeyCode::Esc => {
                 if self.command_mode {
                     self.command_mode = false;
-                    false
+                    KeyAction::Continue
                 } else {
-                    true
+                    KeyAction::Quit
                 }
             }
             KeyCode::Up if !self.command_mode => {
                 self.scroll_offset = self.scroll_offset.saturating_sub(1);
-                false
+                KeyAction::Continue
             }
             KeyCode::Down if !self.command_mode => {
                 self.scroll_offset = self.scroll_offset.saturating_add(1);
-                false
+                KeyAction::Continue
             }
             KeyCode::PageUp if !self.command_mode => {
                 self.scroll_offset = self
                     .scroll_offset
                     .saturating_sub(self.body_height.saturating_sub(2));
-                false
+                KeyAction::Continue
             }
             KeyCode::PageDown if !self.command_mode => {
                 self.scroll_offset = self
                     .scroll_offset
                     .saturating_add(self.body_height.saturating_sub(2));
-                false
+                KeyAction::Continue
             }
             KeyCode::Home if !self.command_mode => {
                 self.scroll_offset = 0;
-                false
+                KeyAction::Continue
             }
-            KeyCode::Char('q') if !self.command_mode => true,
+            KeyCode::Char('q') if !self.command_mode => KeyAction::Quit,
+            KeyCode::Char('p') if !self.command_mode => KeyAction::Presets,
             KeyCode::Char('r') if !self.command_mode => {
                 self.reload_config();
-                false
+                KeyAction::Continue
             }
             KeyCode::Char(character) if self.command_mode => {
                 if !character.is_control() {
                     self.input_buffer.push(character);
                 }
-                false
+                KeyAction::Continue
             }
             _ => {
                 if !self.command_mode {
@@ -464,7 +529,7 @@ impl Engine {
                         self.switch_by_key(ch);
                     }
                 }
-                false
+                KeyAction::Continue
             }
         }
     }
@@ -511,7 +576,7 @@ impl Engine {
             .join(" ");
 
         format!(
-            "{} | {} | tick:{} rx:{} pid:{} | {} | r:reload q:quit",
+            "{} | {} | tick:{} rx:{} pid:{} | {} | p:presety r:reload q:quit",
             self.active().label,
             self.status(),
             self.tick_count,
@@ -638,7 +703,7 @@ fn render(frame: &mut Frame, engine: &mut Engine) {
     }
 }
 
-fn run(terminal: &mut Terminal<Backend>, engine: &mut Engine) -> io::Result<()> {
+fn run(terminal: &mut Terminal<Backend>, engine: &mut Engine) -> io::Result<RunResult> {
     loop {
         engine.tick();
         terminal.draw(|frame| render(frame, engine))?;
@@ -652,25 +717,140 @@ fn run(terminal: &mut Terminal<Backend>, engine: &mut Engine) -> io::Result<()> 
                 continue;
             }
 
-            if engine.handle_key(key.code) {
-                return Ok(());
+            match engine.handle_key(key.code) {
+                KeyAction::Continue => {}
+                KeyAction::Quit => return Ok(RunResult::Quit),
+                KeyAction::Presets => return Ok(RunResult::BackToPresets),
+            }
+        }
+    }
+}
+
+// --- Preset selection screen ---
+
+fn render_presets(frame: &mut Frame, presets: &[PresetEntry], selected: usize) {
+    let area = frame.area();
+
+    let block = Block::default()
+        .title(format!(" XcratesX — Co chcesz dziś robić? :: {JFP_VERSION} "))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let [body_area, footer_area] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
+
+    let mut lines: Vec<Line> = vec![Line::from(""), Line::from("")];
+
+    for (i, preset) in presets.iter().enumerate() {
+        let marker = if i == selected { "▸ " } else { "  " };
+        let style = if i == selected {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        lines.push(Line::styled(
+            format!("{marker}{}. {} — {}", i + 1, preset.name, preset.description),
+            style,
+        ));
+        lines.push(Line::from(""));
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines).alignment(Alignment::Left),
+        body_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(
+            "↑↓ nawigacja | Enter wybierz | q wyjście",
+        ))
+        .style(Style::default().fg(Color::DarkGray)),
+        footer_area,
+    );
+}
+
+fn run_preset_select(
+    terminal: &mut Terminal<Backend>,
+    presets: &[PresetEntry],
+) -> io::Result<Option<usize>> {
+    let mut selected: usize = 0;
+
+    loop {
+        terminal.draw(|frame| render_presets(frame, presets, selected))?;
+
+        if !event::poll(Duration::from_millis(100))? {
+            continue;
+        }
+
+        if let Event::Key(key) = event::read()? {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+
+            match key.code {
+                KeyCode::Up => {
+                    selected = selected.saturating_sub(1);
+                }
+                KeyCode::Down => {
+                    if selected + 1 < presets.len() {
+                        selected += 1;
+                    }
+                }
+                KeyCode::Enter => {
+                    return Ok(Some(selected));
+                }
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    return Ok(None);
+                }
+                KeyCode::Char(ch) => {
+                    if let Some(n) = ch.to_digit(10) {
+                        let idx = n as usize;
+                        if idx >= 1 && idx <= presets.len() {
+                            return Ok(Some(idx - 1));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
 }
 
 fn main() -> io::Result<()> {
-    let plugins = load_plugins();
-
-    if plugins.is_empty() {
-        eprintln!("Brak slotow w workspace.toml i brak domyslnych wtyczek.");
-        return Ok(());
-    }
-
-    let mut engine = Engine::new(plugins);
+    let presets = load_presets();
     let mut terminal = init_terminal()?;
-    let result = run(&mut terminal, &mut engine);
-    engine.stop_plugin();
-    restore_terminal(&mut terminal)?;
-    result
+
+    loop {
+        let selected = run_preset_select(&mut terminal, &presets)?;
+
+        let Some(idx) = selected else {
+            restore_terminal(&mut terminal)?;
+            return Ok(());
+        };
+
+        let plugins = plugins_for_preset(&presets[idx]);
+
+        if plugins.is_empty() {
+            continue;
+        }
+
+        let mut engine = Engine::new(plugins);
+        let result = run(&mut terminal, &mut engine)?;
+        engine.stop_plugin();
+
+        match result {
+            RunResult::Quit => {
+                restore_terminal(&mut terminal)?;
+                return Ok(());
+            }
+            RunResult::BackToPresets => continue,
+        }
+    }
 }
