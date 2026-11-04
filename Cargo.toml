@@ -3,8 +3,6 @@ members = [
     "host_engine",
     "shared_contract",
     "plugin_osint",
-    "plugin_music",
-    "plugin_writing",
     "plugin_audio",
     "plugin_crucible",
     "plugin_search",

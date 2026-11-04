@@ -721,9 +721,9 @@ name = "host_engine"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "jfp-contract",
  "ratatui",
  "serde",
- "shared_contract",
  "toml",
 ]
 
@@ -1005,6 +1005,10 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "jfp-contract"
+version = "0.1.0"
 
 [[package]]
 name = "js-sys"
@@ -1527,17 +1531,17 @@ name = "plugin_audio"
 version = "0.1.0"
 dependencies = [
  "hound",
- "shared_contract",
+ "jfp-contract",
 ]
 
 [[package]]
 name = "plugin_crate_scout"
 version = "0.1.0"
 dependencies = [
+ "jfp-contract",
  "reqwest",
  "serde",
  "serde_json",
- "shared_contract",
  "tokio",
 ]
 
@@ -1545,31 +1549,24 @@ dependencies = [
 name = "plugin_crucible"
 version = "0.1.0"
 dependencies = [
- "shared_contract",
+ "jfp-contract",
 ]
 
 [[package]]
 name = "plugin_media_meta"
 version = "0.1.0"
 dependencies = [
+ "jfp-contract",
  "lofty",
- "shared_contract",
-]
-
-[[package]]
-name = "plugin_music"
-version = "0.1.0"
-dependencies = [
- "shared_contract",
 ]
 
 [[package]]
 name = "plugin_osint"
 version = "0.1.0"
 dependencies = [
+ "jfp-contract",
  "reqwest",
  "serde_json",
- "shared_contract",
  "tokio",
 ]
 
@@ -1577,9 +1574,9 @@ dependencies = [
 name = "plugin_search"
 version = "0.1.0"
 dependencies = [
+ "jfp-contract",
  "reqwest",
  "scraper",
- "shared_contract",
  "tokio",
 ]
 
@@ -1587,15 +1584,8 @@ dependencies = [
 name = "plugin_sysinfo"
 version = "0.1.0"
 dependencies = [
- "shared_contract",
+ "jfp-contract",
  "sysinfo",
-]
-
-[[package]]
-name = "plugin_writing"
-version = "0.1.0"
-dependencies = [
- "shared_contract",
 ]
 
 [[package]]
@@ -2177,10 +2167,6 @@ dependencies = [
  "cpufeatures 0.2.17",
  "digest",
 ]
-
-[[package]]
-name = "shared_contract"
-version = "0.1.0"
 
 [[package]]
 name = "shlex"

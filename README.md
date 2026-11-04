@@ -20,7 +20,7 @@ Silnik TUI (ratatui/crossterm) sterujący zestawem wtyczek domenowych przez prot
  OSINT  SEARCH  AUDIO SYSINFO SCOUT  MEDIA CRUCIBLE
 ```
 
-- **shared_contract** — biblioteka: `JfpMessage`, `JfpReader` (streaming BufRead parser)
+- **jfp-contract** (`shared_contract/`) — biblioteka JFP: `JfpMessage`, `JfpReader` — [crates.io](https://crates.io/crates/jfp-contract)
 - **host_engine** — TUI z ekranem powitalnym (presety), spawn procesów, TICK/COMMAND
 - **workspace.toml** — rejestr wtyczek (sloty, klucze, opisy)
 - **presets.toml** — presety domenowe (DevOps, Audio, Recon, Wszystko)

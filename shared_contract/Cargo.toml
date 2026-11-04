@@ -1,7 +1,13 @@
 [package]
-name = "shared_contract"
+name = "jfp-contract"
 version = "0.1.0"
 edition = "2021"
+description = "JFP v5.4.0 (JARO Flash Protocol) — text-frame IPC contract for plugin-based TUI workbenches"
+license = "MIT"
+repository = "https://github.com/jarohull-ai/XcratesX"
+keywords = ["jfp", "ipc", "protocol", "tui", "plugin"]
+categories = ["parsing", "encoding"]
+readme = "README.md"
 
 [lib]
 crate-type = ["rlib"]

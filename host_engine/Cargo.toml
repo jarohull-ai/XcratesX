@@ -10,6 +10,6 @@ path = "src/main.rs"
 [dependencies]
 crossterm = "0.29"
 ratatui = "0.30"
-shared_contract = { path = "../shared_contract" }
+shared_contract = { package = "jfp-contract", path = "../shared_contract" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
