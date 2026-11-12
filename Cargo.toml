@@ -9,5 +9,6 @@ members = [
     "plugin_crate_scout",
     "plugin_sysinfo",
     "plugin_media_meta",
+    "plugin_net_diag",
 ]
 resolver = "2"

@@ -1,7 +1,12 @@
 [[preset]]
 name = "DevOps"
 description = "Skanowanie sieci, monitoring, szukanie crate'ów"
-slots = ["plugin_osint", "plugin_crate_scout", "plugin_sysinfo"]
+slots = ["plugin_osint", "plugin_crate_scout", "plugin_sysinfo", "plugin_net_diag"]
+
+[[preset]]
+name = "Cluster"
+description = "Diagnostyka klastra i monitoring maszyn (Viper + Venom)"
+slots = ["plugin_net_diag", "plugin_sysinfo", "plugin_osint"]
 
 [[preset]]
 name = "Audio"

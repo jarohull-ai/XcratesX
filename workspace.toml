@@ -39,3 +39,9 @@ key = "9"
 label = "CRUCIBLE"
 binary = "plugin_crucible"
 description = "Stress-test: celowy crash po 6 tickach"
+
+[[slot]]
+key = "8"
+label = "NET_DIAG"
+binary = "plugin_net_diag"
+description = "Diagnostyka sieciowa klastra Viper <-> Venom i portow LM Studio"

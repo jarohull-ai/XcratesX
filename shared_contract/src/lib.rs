@@ -34,7 +34,7 @@ impl JfpMessage {
     }
 
     pub fn to_jfp_string(&self) -> String {
-        let mut frame = String::new();
+        let mut frame = String::with_capacity(128 + self.body.len());
 
         frame.push_str(JFP_HEADER);
         frame.push('\n');
@@ -123,9 +123,9 @@ impl<R: BufRead> JfpReader<R> {
     }
 
     pub fn next_frame(&mut self) -> Option<JfpMessage> {
+        let mut line = String::with_capacity(256);
         loop {
-            let mut line = String::new();
-
+            line.clear();
             match self.reader.read_line(&mut line) {
                 Ok(0) | Err(_) => return None,
                 Ok(_) => {}
@@ -249,5 +249,20 @@ mod tests {
         let frame = reader.next_frame().expect("second header wins");
         assert_eq!(frame.intent.as_deref(), Some("TICK"));
         assert_eq!(frame.body, "3");
+    }
+
+    #[test]
+    fn test_rapid_sequence_reading() {
+        let msg = JfpMessage::reply("OK", "payload-data");
+        let encoded = msg.to_jfp_string();
+        let stream = format!("{encoded}\n{encoded}\n{encoded}\n");
+
+        let mut reader = JfpReader::new(Cursor::new(stream.into_bytes()));
+        for _ in 0..3 {
+            let parsed = reader.next_frame().expect("valid frame");
+            assert_eq!(parsed.status, "OK");
+            assert_eq!(parsed.body, "payload-data");
+        }
+        assert_eq!(reader.next_frame(), None);
     }
 }

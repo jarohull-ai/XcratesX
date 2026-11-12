@@ -1561,6 +1561,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin_net_diag"
+version = "0.1.0"
+dependencies = [
+ "jfp-contract",
+]
+
+[[package]]
 name = "plugin_osint"
 version = "0.1.0"
 dependencies = [
