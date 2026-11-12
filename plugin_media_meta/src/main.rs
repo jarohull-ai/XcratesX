@@ -26,8 +26,8 @@ fn analyze_file(path: &str) -> Result<String, String> {
     }
 
     let p = Path::new(path);
-    if !p.exists() {
-        return Err(format!("Plik nie istnieje: {path}"));
+    if !p.is_file() {
+        return Err(format!("Sciezka nie istnieje lub nie jest plikiem: {path}"));
     }
 
     let tagged_file = Probe::open(p)

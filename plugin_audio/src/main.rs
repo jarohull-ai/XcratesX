@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -9,7 +10,22 @@ struct AudioState {
     last_error: Option<String>,
 }
 
+const MAX_WAV_BYTES: u64 = 500 * 1024 * 1024; // 500 MB limit
+
 fn analyze_wav(path: &Path) -> Result<String, String> {
+    if !path.is_file() {
+        return Err("Sciezka nie istnieje lub nie jest zwyklym plikiem.".into());
+    }
+
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.len() > MAX_WAV_BYTES {
+            return Err(format!(
+                "Plik przekracza limit bezpieczenstwa ({} MB > 500 MB).",
+                meta.len() / (1024 * 1024)
+            ));
+        }
+    }
+
     let reader = hound::WavReader::open(path).map_err(|e| format!("Nie mozna otworzyc: {e}"))?;
 
     let spec = reader.spec();
@@ -41,7 +57,7 @@ fn analyze_wav(path: &Path) -> Result<String, String> {
         report.push_str(&format!("\nPEAK: {peak:.4}"));
         report.push_str(&format!("\nRMS:  {rms:.4}"));
 
-        if peak > 0.0 {
+        if peak > 0.0 && rms > 0.0 {
             let crest_db = 20.0 * (peak / rms).log10();
             report.push_str(&format!("\nCREST: {crest_db:.1} dB"));
         }

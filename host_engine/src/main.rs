@@ -102,6 +102,15 @@ struct SlotEntry {
     description: String,
 }
 
+fn is_safe_binary_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+        && Path::new(name).is_relative()
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 fn load_plugins() -> Vec<PluginSpec> {
     let config_path = config_path();
 
@@ -111,6 +120,9 @@ fn load_plugins() -> Vec<PluginSpec> {
                 .slot
                 .into_iter()
                 .filter_map(|entry| {
+                    if !is_safe_binary_name(&entry.binary) {
+                        return None;
+                    }
                     let key = entry.key.chars().next()?;
                     Some(PluginSpec {
                         binary: entry.binary,
@@ -852,5 +864,22 @@ fn main() -> io::Result<()> {
             }
             RunResult::BackToPresets => continue,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_safe_binary_name() {
+        assert!(is_safe_binary_name("plugin_osint"));
+        assert!(is_safe_binary_name("plugin_net-diag_1"));
+        assert!(!is_safe_binary_name("/bin/sh"));
+        assert!(!is_safe_binary_name("../plugin_osint"));
+        assert!(!is_safe_binary_name("foo/bar"));
+        assert!(!is_safe_binary_name("foo\\bar"));
+        assert!(!is_safe_binary_name(""));
+        assert!(!is_safe_binary_name("plugin;rm"));
     }
 }

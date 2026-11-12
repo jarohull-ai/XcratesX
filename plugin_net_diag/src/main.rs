@@ -4,18 +4,10 @@ use std::time::{Duration, Instant};
 
 use shared_contract::{JfpMessage, JfpReader};
 
+#[derive(Default)]
 struct State {
     last_report: Option<String>,
     check_count: u64,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            last_report: None,
-            check_count: 0,
-        }
-    }
 }
 
 fn check_tcp_port(addr_str: &str, timeout: Duration) -> (bool, u128, String) {

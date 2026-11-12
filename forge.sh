@@ -9,6 +9,12 @@ fi
 
 NAME="$1"
 shift
+
+if ! echo "$NAME" | grep -qE '^[a-z0-9_]+$'; then
+    echo "BLAD: Nazwa pluginu moze zawierac wylacznie male litery, cyfry i podkreslenia (np. net_diag)."
+    exit 1
+fi
+
 DIR="plugin_${NAME}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
@@ -27,6 +33,10 @@ if ! grep -q "\"$DIR\"" "$ROOT/Cargo.toml"; then
 fi
 
 for CRATE in "$@"; do
+    if ! echo "$CRATE" | grep -qE '^[a-zA-Z0-9_\-]+$'; then
+        echo "BLAD: Nieprawidlowa nazwa crate: $CRATE"
+        exit 1
+    fi
     echo ">>> cargo add $CRATE..."
     cargo add "$CRATE" --manifest-path "$ROOT/$DIR/Cargo.toml"
 done

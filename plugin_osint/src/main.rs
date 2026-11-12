@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
 use shared_contract::{JfpMessage, JfpReader};
 use tokio::sync::{mpsc, Mutex};
@@ -32,10 +33,30 @@ fn send_reply(stdout: &mut io::Stdout, message: JfpMessage) -> bool {
     stdout.flush().is_ok()
 }
 
-async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
-    let url = format!("http://ip-api.com/json/{target}");
+fn is_valid_target(target: &str) -> bool {
+    !target.is_empty()
+        && target.len() <= 253
+        && target.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':')
+}
 
-    let result = reqwest::get(&url).await;
+async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
+    let url = format!("https://ip-api.com/json/{target}");
+
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(6))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let mut guard = state.lock().await;
+            if guard.target == target {
+                guard.scan = ScanState::Error(format!("Blad konfiguracji klienta HTTP: {e}"));
+            }
+            return;
+        }
+    };
+
+    let result = client.get(&url).send().await;
 
     let mut guard = state.lock().await;
 
@@ -54,7 +75,7 @@ async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
             }
         },
         Err(err) => {
-            guard.scan = ScanState::Error(format!("Blad HTTP: {err}"));
+            guard.scan = ScanState::Error(format!("Blad HTTP (timeout/polaczenie): {err}"));
         }
     }
 }
@@ -64,6 +85,13 @@ fn handle_command(target: &str, state: &mut OsintState) -> JfpMessage {
 
     if target.is_empty() {
         return JfpMessage::reply("OK", "OSINT | Pusty cel - podaj adres IP lub domene.");
+    }
+
+    if !is_valid_target(target) {
+        return JfpMessage::reply(
+            "ERROR",
+            "OSINT | Nieprawidlowy format celu (dozwolone tylko litery, cyfry, kropki, myslniki).",
+        );
     }
 
     state.target = target.to_owned();
@@ -145,5 +173,21 @@ async fn main() {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_target() {
+        assert!(is_valid_target("8.8.8.8"));
+        assert!(is_valid_target("github.com"));
+        assert!(is_valid_target("2001:4860:4860::8888"));
+        assert!(!is_valid_target(""));
+        assert!(!is_valid_target("8.8.8.8; rm -rf /"));
+        assert!(!is_valid_target("http://malicious.com"));
+        assert!(!is_valid_target("example.com?query=1"));
     }
 }

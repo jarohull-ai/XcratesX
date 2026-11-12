@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
 use scraper::{Html, Selector};
 use shared_contract::{JfpMessage, JfpReader};
@@ -33,24 +34,68 @@ fn send_reply(stdout: &mut io::Stdout, message: JfpMessage) -> bool {
     stdout.flush().is_ok()
 }
 
+fn is_safe_web_url(url: &str) -> bool {
+    let lower = url.trim().to_lowercase();
+    (lower.starts_with("http://") || lower.starts_with("https://"))
+        && !lower.contains(' ')
+        && lower.len() <= 2048
+}
+
+const MAX_HTML_BYTES: usize = 2 * 1024 * 1024; // 2 MiB limit chroniacy przed OOM
+
 async fn scrape_url(url: String, state: Arc<Mutex<SearchState>>) {
-    let result = reqwest::get(&url).await;
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let mut guard = state.lock().await;
+            if guard.url == url {
+                guard.scrape = ScrapeState::Error(format!("Blad konfiguracji HTTP: {e}"));
+            }
+            return;
+        }
+    };
+
+    let result = client.get(&url).send().await;
 
     let html = match result {
-        Ok(resp) => match resp.text().await {
-            Ok(body) => body,
-            Err(err) => {
-                let mut guard = state.lock().await;
-                if guard.url == url {
-                    guard.scrape = ScrapeState::Error(format!("Blad odczytu body: {err}"));
+        Ok(resp) => {
+            if let Some(len) = resp.content_length() {
+                if len > (MAX_HTML_BYTES as u64) {
+                    let mut guard = state.lock().await;
+                    if guard.url == url {
+                        guard.scrape = ScrapeState::Error(format!(
+                            "Odpowiedz zbyt duza ({len} bajtow, limit: {MAX_HTML_BYTES})"
+                        ));
+                    }
+                    return;
                 }
-                return;
             }
-        },
+
+            match resp.bytes().await {
+                Ok(bytes) => {
+                    let slice = if bytes.len() > MAX_HTML_BYTES {
+                        &bytes[..MAX_HTML_BYTES]
+                    } else {
+                        &bytes[..]
+                    };
+                    String::from_utf8_lossy(slice).to_string()
+                }
+                Err(err) => {
+                    let mut guard = state.lock().await;
+                    if guard.url == url {
+                        guard.scrape = ScrapeState::Error(format!("Blad odczytu body: {err}"));
+                    }
+                    return;
+                }
+            }
+        }
         Err(err) => {
             let mut guard = state.lock().await;
             if guard.url == url {
-                guard.scrape = ScrapeState::Error(format!("Blad HTTP: {err}"));
+                guard.scrape = ScrapeState::Error(format!("Blad HTTP (timeout/polaczenie): {err}"));
             }
             return;
         }
@@ -139,6 +184,13 @@ fn handle_command(input: &str, state: &mut SearchState) -> JfpMessage {
     } else {
         url.to_owned()
     };
+
+    if !is_safe_web_url(&url) {
+        return JfpMessage::reply(
+            "ERROR",
+            "SEARCH | Nieprawidlowy URL (dozwolone tylko protokoly http/https, bez spacji).",
+        );
+    }
 
     state.url = url.clone();
     state.scrape = ScrapeState::Fetching;

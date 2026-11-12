@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::Deserialize;
 use shared_contract::{JfpMessage, JfpReader};
@@ -201,7 +202,8 @@ fn format_detail(resp: &CrateDetailResponse) -> String {
         let _ = writeln!(out, "  Ostatnie:   {} (90 dni)", format_downloads(recent));
     }
 
-    let _ = writeln!(out, "  Aktualizacja: {}", &c.updated_at[..10]);
+    let updated = c.updated_at.get(..10).unwrap_or(&c.updated_at);
+    let _ = writeln!(out, "  Aktualizacja: {updated}");
 
     if let Some(repo) = &c.repository {
         let _ = writeln!(out, "  Repo:       {repo}");
@@ -254,8 +256,9 @@ async fn search_crates(query: String, sort: SortMode, state: Arc<Mutex<State>>) 
 
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(8))
         .build()
-        .unwrap();
+        .unwrap_or_default();
 
     let result = client.get(&url).send().await;
 
@@ -285,8 +288,9 @@ async fn fetch_detail(name: String, state: Arc<Mutex<State>>) {
 
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(8))
         .build()
-        .unwrap();
+        .unwrap_or_default();
 
     let result = client.get(&url).send().await;
 
