@@ -1,5 +1,5 @@
 # XcratesX: The Rust Lab & Launcher
-# Dynamic workspace configuration
+# Dynamic workspace configuration with Multi-Bank scaling
 
 [[slot]]
 key = "1"
@@ -19,5 +19,46 @@ label = "CLUSTER"
 binary = "plugin_net_diag"
 description = "Diagnostyka połączenia Viper (PC) <-> Venom (Laptop)"
 
-# Poniżej dynamiczne sloty laboratoryjne (Sandbox Slots)
-# Użytkownik może montować tu dowolne crate'y komendami Labu
+[[slot]]
+key = "7"
+label = "RODIO"
+binary = "plugin_rodio"
+description = "Autonomicznie zamontowany silnik audio rodio v0.19.0 (Sink / Mixer)"
+
+# === BANK C: AI & VECTOR (SLOTY 13-18) ===
+
+[[slot]]
+key = "13"
+label = "BURN_CORE"
+binary = "plugin_burn_core"
+description = "Silnik tensorów i graf automatycznego różniczkowania (Autodiff)"
+
+[[slot]]
+key = "14"
+label = "TOKENIZERS"
+binary = "plugin_tokenizers"
+description = "Wielowątkowy tokenizator BPE (Hugging Face w Rust) — słownik 32k"
+
+[[slot]]
+key = "15"
+label = "SAFETENSORS"
+binary = "plugin_safetensors"
+description = "Bezpieczny format wag i checkpointów modelu z mmap zero-copy"
+
+[[slot]]
+key = "16"
+label = "CUBECL"
+binary = "plugin_cubecl"
+description = "Kompilator kerneli GPU w Rust pod architekturę AMD Navi / WGPU"
+
+[[slot]]
+key = "17"
+label = "VENOM_STREAM"
+binary = "plugin_venom_stream"
+description = "Odbiornik batchy danych przesyłanych gigabitem z laptopa Venom"
+
+[[slot]]
+key = "18"
+label = "TRAIN_REPL"
+binary = "plugin_train_repl"
+description = "Konsola telemetryczna procesu uczenia (Loss, Perplexity, Checkpoints)"
