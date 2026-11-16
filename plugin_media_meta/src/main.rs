@@ -22,26 +22,30 @@ fn format_duration(d: Duration) -> String {
 fn analyze_file(path: &str) -> Result<String, String> {
     let path = path.trim();
     if path.is_empty() {
-        return Err("Podaj ścieżkę do pliku audio.".into());
+        return Err("Enter an audio file path.".into());
     }
 
     let p = Path::new(path);
-    if !p.exists() {
-        return Err(format!("Plik nie istnieje: {path}"));
+    if !p.is_file() {
+        return Err(format!("Path is missing or not a file: {path}"));
     }
 
     let tagged_file = Probe::open(p)
-        .map_err(|e| format!("Nie mogę otworzyć: {e}"))?
+        .map_err(|e| format!("Cannot open: {e}"))?
         .read()
-        .map_err(|e| format!("Nie mogę odczytać: {e}"))?;
+        .map_err(|e| format!("Cannot read: {e}"))?;
 
-    let mut out = format!("MEDIA META | Plik: {path}\n\n");
+    let mut out = format!("MEDIA META | File: {path}\n\n");
 
     let file_type = tagged_file.file_type();
     let _ = writeln!(out, "  Format:     {file_type:?}");
 
     let props = tagged_file.properties();
-    let _ = writeln!(out, "  Czas:       {}", format_duration(props.duration()));
+    let _ = writeln!(
+        out,
+        "  Duration:       {}",
+        format_duration(props.duration())
+    );
 
     if let Some(sr) = props.sample_rate() {
         let channels = props.channels().unwrap_or(0);
@@ -69,12 +73,12 @@ fn analyze_file(path: &str) -> Result<String, String> {
         let _ = writeln!(out);
         let _ = writeln!(
             out,
-            "  Tytuł:      {}",
+            "  Title:      {}",
             tag.title().as_deref().unwrap_or("-")
         );
         let _ = writeln!(
             out,
-            "  Artysta:    {}",
+            "  Artist:    {}",
             tag.artist().as_deref().unwrap_or("-")
         );
         let _ = writeln!(
@@ -84,30 +88,26 @@ fn analyze_file(path: &str) -> Result<String, String> {
         );
         let _ = writeln!(
             out,
-            "  Rok:        {}",
+            "  Year:        {}",
             tag.year().map(|y| y.to_string()).unwrap_or("-".into())
         );
-        let _ = writeln!(
-            out,
-            "  Gatunek:    {}",
-            tag.genre().as_deref().unwrap_or("-")
-        );
+        let _ = writeln!(out, "  Genre:    {}", tag.genre().as_deref().unwrap_or("-"));
 
         let pics = tag.pictures();
         if pics.is_empty() {
-            let _ = writeln!(out, "  Okładka:    Nie");
+            let _ = writeln!(out, "  Cover:      No");
         } else {
             let pic = &pics[0];
             let size = pic.data().len();
             let _ = writeln!(
                 out,
-                "  Okładka:    Tak ({}, {} KB)",
+                "  Cover:      Yes ({}, {} KB)",
                 pic.mime_type().unwrap_or(&lofty::picture::MimeType::Png),
                 size / 1024
             );
         }
     } else {
-        let _ = writeln!(out, "\n  (brak tagów)");
+        let _ = writeln!(out, "\n  (no tags)");
     }
 
     Ok(out)
@@ -123,7 +123,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                     Some(JfpMessage::reply("OK", report))
                 }
                 Err(err) => {
-                    let msg = format!("MEDIA META | Błąd: {err}");
+                    let msg = format!("MEDIA META | Error: {err}");
                     state.last_output = Some(msg.clone());
                     Some(JfpMessage::reply("ERROR", msg))
                 }
@@ -135,7 +135,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
             } else {
                 Some(JfpMessage::reply(
                     "OK",
-                    "MEDIA META | Podaj ścieżkę do pliku audio (MP3, FLAC, WAV, OGG...)",
+                    "MEDIA META | Enter an audio file path (MP3, FLAC, WAV, OGG...)",
                 ))
             }
         }

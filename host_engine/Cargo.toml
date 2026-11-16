@@ -8,6 +8,8 @@ name = "host_engine"
 path = "src/main.rs"
 
 [dependencies]
+crate_workbench = { path = "../crate_workbench" }
+libc = "0.2"
 crossterm = "0.29"
 ratatui = "0.30"
 shared_contract = { package = "jfp-contract", path = "../shared_contract" }

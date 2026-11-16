@@ -1,41 +1,69 @@
+# XcratesX: The Meccano/Lego for Crates
+# Universal base for assembling and testing crate configurations
+# (c) Jaro - open source, customizable by every user
+
 [[slot]]
 key = "1"
-label = "OSINT"
-binary = "plugin_osint"
-description = "Skanowanie IP/domen (reqwest + ip-api.com)"
+label = "SCOUT"
+binary = "plugin_crate_scout"
+description = "Search crates.io packages"
 
 [[slot]]
 key = "2"
-label = "SEARCH"
-binary = "plugin_search"
-description = "Web scraper — pobiera strone i wyciaga strukture"
+label = "SYSINFO"
+binary = "plugin_sysinfo"
+description = "CPU, memory, disks and processes"
 
 [[slot]]
 key = "3"
-label = "AUDIO"
-binary = "plugin_audio"
-description = "Analiza plikow WAV (hound)"
+label = "CLUSTER"
+binary = "plugin_net_diag"
+description = "TCP connectivity diagnostics"
 
 [[slot]]
 key = "4"
-label = "SYSINFO"
-binary = "plugin_sysinfo"
-description = "Monitor systemu — CPU, RAM, dyski, siec, procesy (sysinfo)"
+label = "BUILDER"
+binary = "plugin_crate_assembler"
+description = "Build and save dependency experiments"
 
 [[slot]]
 key = "5"
-label = "SCOUT"
-binary = "plugin_crate_scout"
-description = "Wyszukiwarka crates.io — szukaj, porownuj, wybieraj crate'y"
+label = "CATALOG"
+binary = "plugin_crate_kit"
+description = "Browse the curated crate catalog"
 
 [[slot]]
 key = "6"
+label = "ANALYZER"
+binary = "plugin_crate_analyzer"
+description = "Inspect resolved Cargo dependency graphs"
+
+[[slot]]
+key = "7"
+label = "AUDIO"
+binary = "plugin_audio"
+description = "WAV measurements: peak, RMS, crest"
+
+[[slot]]
+key = "8"
 label = "MEDIA"
 binary = "plugin_media_meta"
-description = "Metadane audio — tagi MP3/FLAC/WAV/OGG (lofty)"
+description = "Audio tags and bitrate"
 
 [[slot]]
 key = "9"
+label = "OSINT"
+binary = "plugin_osint"
+description = "IP/domain lookup via ip-api.com"
+
+[[slot]]
+key = "s"
+label = "SEARCH"
+binary = "plugin_search"
+description = "Inspect HTML structure"
+
+[[slot]]
+key = "c"
 label = "CRUCIBLE"
 binary = "plugin_crucible"
-description = "Stress-test: celowy crash po 6 tickach"
+description = "Intentional crash after 6 ticks"

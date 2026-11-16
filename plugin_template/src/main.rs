@@ -17,12 +17,12 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
         "COMMAND" => {
             let input = frame.body.trim();
 
-            // TODO: tutaj logika twojego crate'a
-            state.last_output = Some(format!("Otrzymano: {input}"));
+            // TODO: implement your plugin logic here
+            state.last_output = Some(format!("Received: {input}"));
 
             Some(JfpMessage::reply(
                 "OK",
-                format!("PLUGIN | Przetworzono: {input}"),
+                format!("PLUGIN | Processed: {input}"),
             ))
         }
         "TICK" => {
@@ -31,7 +31,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
             } else {
                 Some(JfpMessage::reply(
                     "OK",
-                    "PLUGIN | Gotowy. Wpisz komende w wierszu polecen.",
+                    "PLUGIN | Ready. Enter a command.",
                 ))
             }
         }

@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::Deserialize;
 use shared_contract::{JfpMessage, JfpReader};
@@ -43,10 +44,10 @@ impl SortMode {
 
     fn label(self) -> &'static str {
         match self {
-            Self::Relevance => "trafnosc",
-            Self::Downloads => "pobrania",
-            Self::Recent => "ostatnie pobrania",
-            Self::New => "ostatnie aktualizacje",
+            Self::Relevance => "relevance",
+            Self::Downloads => "downloads",
+            Self::Recent => "recent downloads",
+            Self::New => "recent updates",
         }
     }
 }
@@ -139,13 +140,13 @@ fn format_search_results(response: &ApiResponse, query: &str, sort: SortMode) ->
 
     let _ = writeln!(
         out,
-        "CRATE SCOUT | Wyniki dla \"{query}\" (sort: {}, znaleziono: {})\n",
+        "CRATE SCOUT | Results for \"{query}\" (sort: {}, found: {})\n",
         sort.label(),
         response.meta.total
     );
 
     if response.crates.is_empty() {
-        out.push_str("  (brak wynikow)\n");
+        out.push_str("  (no results)\n");
         return out;
     }
 
@@ -173,11 +174,11 @@ fn format_search_results(response: &ApiResponse, query: &str, sort: SortMode) ->
         );
     }
 
+    let _ = writeln!(out, "\nView package details (e.g. \"info hound\")");
     let _ = writeln!(
         out,
-        "\nWpisz nazwe crate'a aby zobaczyc szczegoly (np. \"info hound\")"
+        "Sort: \"sort dl\" | \"sort rel\" | \"sort recent\" | \"sort new\""
     );
-    let _ = writeln!(out, "Sortowanie: \"sort dl\" | \"sort rel\" | \"sort recent\" | \"sort new\"");
 
     out
 }
@@ -186,22 +187,27 @@ fn format_detail(resp: &CrateDetailResponse) -> String {
     let c = &resp.krate;
     let mut out = String::new();
 
-    let _ = writeln!(out, "CRATE SCOUT | Szczegoly: {}\n", c.name);
+    let _ = writeln!(out, "CRATE SCOUT | Details: {}\n", c.name);
 
     let desc = c.description.as_deref().unwrap_or("-");
-    let _ = writeln!(out, "  Opis:       {desc}");
+    let _ = writeln!(out, "  Description:       {desc}");
     let _ = writeln!(
         out,
-        "  Wersja:     {}",
+        "  Version:     {}",
         c.max_stable_version.as_deref().unwrap_or("?")
     );
-    let _ = writeln!(out, "  Pobrania:   {} (total)", format_downloads(c.downloads));
+    let _ = writeln!(
+        out,
+        "  Downloads:   {} (total)",
+        format_downloads(c.downloads)
+    );
 
     if let Some(recent) = c.recent_downloads {
-        let _ = writeln!(out, "  Ostatnie:   {} (90 dni)", format_downloads(recent));
+        let _ = writeln!(out, "  Recent:   {} (90 days)", format_downloads(recent));
     }
 
-    let _ = writeln!(out, "  Aktualizacja: {}", &c.updated_at[..10]);
+    let updated = c.updated_at.get(..10).unwrap_or(&c.updated_at);
+    let _ = writeln!(out, "  Updated: {updated}");
 
     if let Some(repo) = &c.repository {
         let _ = writeln!(out, "  Repo:       {repo}");
@@ -213,16 +219,20 @@ fn format_detail(resp: &CrateDetailResponse) -> String {
 
     if !resp.keywords.is_empty() {
         let kw: Vec<&str> = resp.keywords.iter().map(|k| k.keyword.as_str()).collect();
-        let _ = writeln!(out, "  Tagi:       {}", kw.join(", "));
+        let _ = writeln!(out, "  Tags:       {}", kw.join(", "));
     }
 
     if !resp.categories.is_empty() {
-        let cats: Vec<&str> = resp.categories.iter().map(|c| c.category.as_str()).collect();
-        let _ = writeln!(out, "  Kategorie:  {}", cats.join(", "));
+        let cats: Vec<&str> = resp
+            .categories
+            .iter()
+            .map(|c| c.category.as_str())
+            .collect();
+        let _ = writeln!(out, "  Categories:  {}", cats.join(", "));
     }
 
     if !resp.versions.is_empty() {
-        let _ = writeln!(out, "\n  --- WERSJE (ostatnie 8) ---");
+        let _ = writeln!(out, "\n  --- VERSIONS (latest 8) ---");
         for v in resp.versions.iter().take(8) {
             let yanked = if v.yanked { " [YANKED]" } else { "" };
             let _ = writeln!(
@@ -242,7 +252,36 @@ fn format_detail(resp: &CrateDetailResponse) -> String {
         c.max_stable_version.as_deref().unwrap_or("*")
     );
 
+    let _ = writeln!(
+        out,
+        "\n  Add to experiment: :add {}:{}",
+        c.name,
+        c.max_stable_version.as_deref().unwrap_or("*")
+    );
     out
+}
+
+async fn request_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if bytes.len() + chunk.len() > 4 * 1024 * 1024 {
+            return Err("crates.io response exceeds 4 MiB".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&bytes).map_err(|e| e.to_string())
 }
 
 async fn search_crates(query: String, sort: SortMode, state: Arc<Mutex<State>>) {
@@ -251,61 +290,22 @@ async fn search_crates(query: String, sort: SortMode, state: Arc<Mutex<State>>) 
         urlencoded(&query),
         sort.as_str()
     );
-
-    let client = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .build()
-        .unwrap();
-
-    let result = client.get(&url).send().await;
-
+    let result = request_json::<ApiResponse>(&url).await;
     let mut guard = state.lock().await;
-    if guard.query != query {
-        return;
-    }
-
-    match result {
-        Ok(resp) => match resp.json::<ApiResponse>().await {
-            Ok(data) => {
-                let report = format_search_results(&data, &query, sort);
-                guard.scout = ScoutState::Results(report);
-            }
-            Err(err) => {
-                guard.scout = ScoutState::Error(format!("Blad parsowania: {err}"));
-            }
-        },
-        Err(err) => {
-            guard.scout = ScoutState::Error(format!("Blad HTTP: {err}"));
-        }
-    }
+    guard.scout = match result {
+        Ok(data) => ScoutState::Results(format_search_results(&data, &query, sort)),
+        Err(error) => ScoutState::Error(error),
+    };
 }
 
 async fn fetch_detail(name: String, state: Arc<Mutex<State>>) {
-    let url = format!("https://crates.io/api/v1/crates/{name}");
-
-    let client = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .build()
-        .unwrap();
-
-    let result = client.get(&url).send().await;
-
+    let url = format!("https://crates.io/api/v1/crates/{}", urlencoded(&name));
+    let result = request_json::<CrateDetailResponse>(&url).await;
     let mut guard = state.lock().await;
-
-    match result {
-        Ok(resp) => match resp.json::<CrateDetailResponse>().await {
-            Ok(data) => {
-                let report = format_detail(&data);
-                guard.scout = ScoutState::Detail(report);
-            }
-            Err(err) => {
-                guard.scout = ScoutState::Error(format!("Blad parsowania: {err}"));
-            }
-        },
-        Err(err) => {
-            guard.scout = ScoutState::Error(format!("Blad HTTP: {err}"));
-        }
-    }
+    guard.scout = match result {
+        Ok(data) => ScoutState::Detail(format_detail(&data)),
+        Err(error) => ScoutState::Error(error),
+    };
 }
 
 fn urlencoded(s: &str) -> String {
@@ -328,20 +328,26 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
 
     if input.is_empty() {
         return (
-            JfpMessage::reply("OK", "SCOUT | Puste zapytanie."),
+            JfpMessage::reply("OK", "SCOUT | Enter a search query."),
             Command::None,
         );
     }
 
-    if let Some(name) = input.strip_prefix("info ").or_else(|| input.strip_prefix("INFO ")) {
+    if let Some(name) = input
+        .strip_prefix("info ")
+        .or_else(|| input.strip_prefix("INFO "))
+    {
         let name = name.trim().to_owned();
         return (
-            JfpMessage::reply("OK", format!("SCOUT | Pobieram szczegoly: {name}")),
+            JfpMessage::reply("OK", format!("SCOUT | Fetching details: {name}")),
             Command::Detail(name),
         );
     }
 
-    if let Some(mode) = input.strip_prefix("sort ").or_else(|| input.strip_prefix("SORT ")) {
+    if let Some(mode) = input
+        .strip_prefix("sort ")
+        .or_else(|| input.strip_prefix("SORT "))
+    {
         let mode = mode.trim().to_lowercase();
         state.sort = match mode.as_str() {
             "dl" | "downloads" => SortMode::Downloads,
@@ -352,7 +358,7 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
                 return (
                     JfpMessage::reply(
                         "OK",
-                        "SCOUT | Nieznane sortowanie. Uzyj: dl, rel, recent, new",
+                        "SCOUT | Unknown sort order. Use: dl, rel, recent, new",
                     ),
                     Command::None,
                 );
@@ -363,7 +369,7 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
             return (
                 JfpMessage::reply(
                     "OK",
-                    format!("SCOUT | Sortowanie: {}. Wpisz zapytanie.", state.sort.label()),
+                    format!("SCOUT | Sort: {}. Enter a query.", state.sort.label()),
                 ),
                 Command::None,
             );
@@ -374,7 +380,7 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
             JfpMessage::reply(
                 "OK",
                 format!(
-                    "SCOUT | Szukam \"{}\" (sort: {})...",
+                    "SCOUT | Searching \"{}\" (sort: {})...",
                     state.query,
                     state.sort.label()
                 ),
@@ -390,7 +396,7 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
         JfpMessage::reply(
             "OK",
             format!(
-                "SCOUT | Szukam \"{}\" (sort: {})...",
+                "SCOUT | Searching \"{}\" (sort: {})...",
                 state.query,
                 state.sort.label()
             ),
@@ -409,20 +415,17 @@ fn handle_tick(state: &State) -> JfpMessage {
     match &state.scout {
         ScoutState::Idle => JfpMessage::reply(
             "OK",
-            "CRATE SCOUT | Wyszukiwarka crates.io\n\
-             Wpisz fraze (np. \"audio wav\", \"http client async\")\n\
-             Komendy: \"info <nazwa>\" | \"sort dl/rel/recent/new\"",
+            "CRATE SCOUT | crates.io search\n\
+             Enter a query (e.g. \"audio wav\", \"http client async\")\n\
+             Commands: \"info <name>\" | \"sort dl/rel/recent/new\"",
         ),
-        ScoutState::Searching => JfpMessage::reply(
-            "WAIT",
-            format!("SCOUT | Szukam \"{}\"...", state.query),
-        ),
+        ScoutState::Searching => {
+            JfpMessage::reply("WAIT", format!("SCOUT | Searching \"{}\"...", state.query))
+        }
         ScoutState::Results(data) | ScoutState::Detail(data) => {
             JfpMessage::reply("OK", data.as_str())
         }
-        ScoutState::Error(err) => {
-            JfpMessage::reply("ERROR", format!("SCOUT | {err}"))
-        }
+        ScoutState::Error(err) => JfpMessage::reply("ERROR", format!("SCOUT | {err}")),
     }
 }
 
@@ -430,24 +433,29 @@ fn handle_tick(state: &State) -> JfpMessage {
 async fn main() {
     let state = Arc::new(Mutex::new(State::default()));
 
-    let (tx, mut rx) = mpsc::unbounded_channel::<JfpMessage>();
+    let (tx, mut rx) = mpsc::channel::<JfpMessage>(32);
 
     tokio::task::spawn_blocking(move || {
         let stdin = io::stdin();
         let mut reader = JfpReader::new(stdin.lock());
 
         while let Some(frame) = reader.next_frame() {
-            if tx.send(frame).is_err() {
+            if tx.blocking_send(frame).is_err() {
                 break;
             }
         }
     });
 
     let mut stdout = io::stdout();
+    let mut task: Option<tokio::task::JoinHandle<()>> = None;
 
     while let Some(frame) = rx.recv().await {
         match frame.intent.as_deref() {
             Some("COMMAND") => {
+                if let Some(previous) = task.take() {
+                    previous.abort();
+                    let _ = previous.await;
+                }
                 let (reply, cmd) = {
                     let mut guard = state.lock().await;
                     handle_command(&frame.body, &mut guard)
@@ -461,11 +469,11 @@ async fn main() {
                     Command::Search(query) => {
                         let sort = state.lock().await.sort;
                         let sc = Arc::clone(&state);
-                        tokio::spawn(search_crates(query, sort, sc));
+                        task = Some(tokio::spawn(search_crates(query, sort, sc)));
                     }
                     Command::Detail(name) => {
                         let sc = Arc::clone(&state);
-                        tokio::spawn(fetch_detail(name, sc));
+                        task = Some(tokio::spawn(fetch_detail(name, sc)));
                     }
                     Command::None => {}
                 }

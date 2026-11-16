@@ -23,6 +23,13 @@ payload text
 
 ## Usage
 
+The reader requires exactly one supported VERSION header and rejects oversized
+frames (including oversized single lines). It recovers at the next frame header.
+STATUS is used for replies; INTENT for requests. Flush stdout after each frame.
+Diagnostics belong on stderr. Marker strings are reserved and must not appear in
+payloads: this version does not implement escaping or arbitrary binary payloads.
+Leading/trailing newlines in the body are trimmed by the parser.
+
 ```rust
 use shared_contract::{JfpMessage, JfpReader};
 

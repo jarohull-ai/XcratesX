@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
 use shared_contract::{JfpMessage, JfpReader};
 use tokio::sync::{mpsc, Mutex};
@@ -32,10 +33,32 @@ fn send_reply(stdout: &mut io::Stdout, message: JfpMessage) -> bool {
     stdout.flush().is_ok()
 }
 
-async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
-    let url = format!("http://ip-api.com/json/{target}");
+fn is_valid_target(target: &str) -> bool {
+    !target.is_empty()
+        && target.len() <= 253
+        && target
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':')
+}
 
-    let result = reqwest::get(&url).await;
+async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
+    let url = format!("https://ip-api.com/json/{target}");
+
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(6))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let mut guard = state.lock().await;
+            if guard.target == target {
+                guard.scan = ScanState::Error(format!("HTTP client configuration error: {e}"));
+            }
+            return;
+        }
+    };
+
+    let result = client.get(&url).send().await;
 
     let mut guard = state.lock().await;
 
@@ -46,15 +69,16 @@ async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
     match result {
         Ok(response) => match response.json::<serde_json::Value>().await {
             Ok(json) => {
-                let formatted = serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string());
+                let formatted =
+                    serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string());
                 guard.scan = ScanState::Finished(formatted);
             }
             Err(err) => {
-                guard.scan = ScanState::Error(format!("Blad parsowania JSON: {err}"));
+                guard.scan = ScanState::Error(format!("JSON parsing failed: {err}"));
             }
         },
         Err(err) => {
-            guard.scan = ScanState::Error(format!("Blad HTTP: {err}"));
+            guard.scan = ScanState::Error(format!("HTTP error (timeout/connection): {err}"));
         }
     }
 }
@@ -63,35 +87,41 @@ fn handle_command(target: &str, state: &mut OsintState) -> JfpMessage {
     let target = target.trim();
 
     if target.is_empty() {
-        return JfpMessage::reply("OK", "OSINT | Pusty cel - podaj adres IP lub domene.");
+        return JfpMessage::reply("OK", "OSINT | Enter an IP address or domain.");
+    }
+
+    if !is_valid_target(target) {
+        return JfpMessage::reply(
+            "ERROR",
+            "OSINT | Invalid target (letters, digits, dots, hyphens and IPv6 colons only).",
+        );
     }
 
     state.target = target.to_owned();
     state.scan = ScanState::Scanning;
 
-    JfpMessage::reply("OK", format!("OSINT | Cel zablokowany: {target}. Rozpoczynam skanowanie..."))
+    JfpMessage::reply(
+        "OK",
+        format!("OSINT | Target: {target}. Starting lookup..."),
+    )
 }
 
 fn handle_tick(state: &OsintState) -> JfpMessage {
     match &state.scan {
-        ScanState::Idle => JfpMessage::reply(
-            "OK",
-            "OSINT | System gotowy. Podaj cel w wierszu polecen (np. 8.8.8.8)",
-        ),
+        ScanState::Idle => {
+            JfpMessage::reply("OK", "OSINT | Ready. Enter an IP or domain (e.g. 8.8.8.8)")
+        }
         ScanState::Scanning => JfpMessage::reply(
             "WAIT",
-            format!(
-                "OSINT | Cel zablokowany: {}. Asynchroniczne skanowanie w toku...",
-                state.target
-            ),
+            format!("OSINT | Target: {}. Lookup in progress...", state.target),
         ),
         ScanState::Finished(data) => JfpMessage::reply(
             "OK",
-            format!("OSINT | Raport dla {}:\n{data}", state.target),
+            format!("OSINT | Report for {}:\n{data}", state.target),
         ),
         ScanState::Error(err) => JfpMessage::reply(
             "ERROR",
-            format!("OSINT | Blad dla {}: {err}", state.target),
+            format!("OSINT | Error for {}: {err}", state.target),
         ),
     }
 }
@@ -145,5 +175,21 @@ async fn main() {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_target() {
+        assert!(is_valid_target("8.8.8.8"));
+        assert!(is_valid_target("github.com"));
+        assert!(is_valid_target("2001:4860:4860::8888"));
+        assert!(!is_valid_target(""));
+        assert!(!is_valid_target("8.8.8.8; rm -rf /"));
+        assert!(!is_valid_target("http://malicious.com"));
+        assert!(!is_valid_target("example.com?query=1"));
     }
 }

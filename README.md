@@ -1,85 +1,173 @@
 # XcratesX
 
-Silnik TUI (ratatui/crossterm) sterujący zestawem wtyczek domenowych przez protokół **JFP v5.4.0** po stdio. Każda wtyczka to osobny proces — izolacja awarii, hot-reload, presety domenowe.
+A Linux terminal workbench for Rust crate experiments and independent command-line plugins.
+Status: experimental. MIT licensed.
 
-## Architektura
+XcratesX runs one selected plugin at a time. Presets filter the available plugins;
+switching plugins stops the previous process and resets its state. Plugins exchange
+JFP messages over standard input/output. Separate processes contain ordinary crashes,
+but are **not a security sandbox**.
 
-```
-                    ┌─────────────┐
-                    │ presets.toml │  ← presety domenowe
-                    └──────┬──────┘
-                           │
-┌──────────────────────────▼───────────────────────────┐
-│                    host_engine                         │
-│  TUI (ratatui) + preset selector + JFP dispatcher     │
-└───┬──────┬──────┬──────┬──────┬──────┬──────┬────────┘
-    │      │      │      │      │      │      │
-  stdio  stdio  stdio  stdio  stdio  stdio  stdio
-    │      │      │      │      │      │      │
-    ▼      ▼      ▼      ▼      ▼      ▼      ▼
- OSINT  SEARCH  AUDIO SYSINFO SCOUT  MEDIA CRUCIBLE
-```
+## Quick start
 
-- **jfp-contract** (`shared_contract/`) — biblioteka JFP: `JfpMessage`, `JfpReader` — [crates.io](https://crates.io/crates/jfp-contract)
-- **host_engine** — TUI z ekranem powitalnym (presety), spawn procesów, TICK/COMMAND
-- **workspace.toml** — rejestr wtyczek (sloty, klucze, opisy)
-- **presets.toml** — presety domenowe (DevOps, Audio, Recon, Wszystko)
-- **forge.sh** — generator nowych wtyczek z szablonu
-
-## Wtyczki
-
-| Slot | Nazwa | Crate | Opis |
-|------|-------|-------|------|
-| 1 | OSINT | reqwest | Skanowanie IP/domen (ip-api.com) |
-| 2 | SEARCH | scraper | Web scraper — struktura HTML |
-| 3 | AUDIO | hound | Analiza plików WAV (peak, RMS, crest) |
-| 4 | SYSINFO | sysinfo | Monitor systemu (CPU, RAM, dyski, sieć, procesy) |
-| 5 | SCOUT | reqwest | Wyszukiwarka crates.io (search, info, sort) |
-| 6 | MEDIA | lofty | Metadane audio (MP3, FLAC, WAV, OGG — tagi, bitrate, okładki) |
-| 9 | CRUCIBLE | — | Stress-test: celowy crash po 6 tickach |
-
-## Presety
-
-Przy starcie wybierasz domenę — ładują się odpowiednie wtyczki:
-
-- **DevOps** — OSINT + SCOUT + SYSINFO
-- **Audio** — AUDIO + MEDIA
-- **Recon** — OSINT + SEARCH + SCOUT
-- **Wszystko** — wszystkie zainstalowane
-
-## Protokół JFP v5.4.0
-
-```
-[JFP_HEADER]
-VERSION: v5.4.0
-STATUS: OK          ← odpowiedź (plugin → host)
-INTENT: COMMAND     ← żądanie (host → plugin)
-[END_HEADER]
-[MESSAGE_BODY]
-treść
-[END_MESSAGE]
-```
-
-## Uruchomienie
+Install stable Rust with Cargo, a C/C++ linker, Git, and standard Linux build tools.
+Some dependencies you experiment with may require additional system libraries.
 
 ```sh
-cargo build
-./target/debug/host_engine
+git clone --branch meccano-crate-set https://github.com/jarohull-ai/XcratesX.git
+cd XcratesX
+cargo build --workspace --release --locked
+./target/release/host_engine
 ```
 
-## Klawisze
+Choose a preset using arrows and Enter. Use the slot keys shown in the footer to
+select a plugin: 1–9, s (web search), c (intentional crash test).
+Tab enters command mode; Enter submits; Esc leaves command mode.
+Outside command mode: p opens presets, r reloads the slot configuration,
+h toggles the last 32 distinct responses, q exits. Arrows/PageUp/PageDown scroll output.
+Reload preserves the selected preset. Configuration errors are reported without replacing it.
 
-- `↑↓` / `1-9` — nawigacja / przełączanie wtyczek
-- `Tab` — tryb komend
-- `Enter` — wyślij komendę
-- `p` — powrót do presetów
-- `r` — przeładuj workspace.toml
-- `q` / `Esc` — wyjście
+## Saved experiments: discovery to reproducible build
 
-## Nowa wtyczka
+Press Tab and enter one command at a time, from any plugin:
+
+```text
+:new json-tools
+:add serde:1, serde_json:1
+:build
+:graph
+:show
+```
+
+`:build` and `:graph` select the appropriate plugin automatically. On a later launch,
+use `:list` and `:use json-tools` to resume. `:remove serde` removes a dependency;
+`:add serde:=1.0.228` changes its requirement. `:help` lists all experiment commands.
+Search in Scout (1), inspect `info serde`, then use `:add NAME:VERSION` to save your choice.
+
+Experiments are saved under `$XDG_DATA_HOME/xcratesx` or `~/.local/share/xcratesx`.
+Override the location with `XCRATESX_DATA_DIR`. Each named directory contains dependency
+requirements, a generated Cargo project, Cargo.lock after resolution, and build/graph reports.
+Copy that directory to share it; recipients can run `cargo build --locked` inside it.
+Editing dependencies invalidates the old lockfile and reports. Subsequent build/graph runs
+reuse the lockfile with `--locked`. Do not edit generated source files: dependency edits
+regenerate them. Only one saved-experiment operation can run at once; locks are released
+automatically when a process exits. Switching away during a build cancels the job.
+
+The same commands work without the TUI:
 
 ```sh
-./forge.sh <nazwa> [crate1 crate2 ...]
-# Przykład:
-./forge.sh recon reqwest scraper
+./target/release/host_engine --experiment ':new json-tools'
+./target/release/host_engine --experiment ':add serde:1, serde_json:1'
+./target/release/host_engine --experiment ':build'
+./target/release/host_engine --check-config
 ```
+
+## Real crate experiments
+
+In Meccano, choose assembler (4), press Tab, and enter:
+
+```text
+test:serde:1, serde_json:1
+```
+
+This creates an independent temporary Cargo project and builds both dependencies
+together. Requirements follow Cargo semver syntax: `1` permits compatible updates;
+`=1.0.100` pins an exact version. Bare crate names use `*`.
+Up to 32 unique crates are accepted. Commas or newlines separate entries; requirements
+containing commas are not supported. The result includes the resolved Cargo.lock.
+Successful compilation does not prove API compatibility or application correctness.
+
+Choose analyzer (6):
+
+```text
+analyze serde:1, tokio:1
+analyze path /absolute/path/to/project/Cargo.toml
+```
+
+The analyzer reads Cargo's actual resolved graph, listing versioned packages and
+their dependency edges. Local project analysis uses `--locked`: create/update that
+project's lockfile yourself first. Metadata covers the Cargo resolution graph, not
+a source-level call graph or a target-specific execution graph.
+
+Cargo jobs run in the background, with one job per plugin. Output is limited to
+8 MiB per stream and Cargo is stopped after 180 seconds. Switching plugins stops
+the plugin process group, including Cargo descendants. Temporary experiment projects
+are normally removed after completion; forced termination can leave directories
+named `xcratesx-*` in the OS temporary directory.
+For cached dependencies only, launch with `XCRATESX_OFFLINE=1`.
+
+Building crates executes their build scripts and procedural macros with your user
+permissions. Use trusted crates, or run the whole workbench in a disposable container
+without secrets. No Git dependencies, custom features, or source-code generation
+are currently supported by the assembler.
+
+## Plugins
+
+| Slot | Plugin | Purpose |
+| --- | --- | --- |
+| 1 | crate_scout | crates.io search and package details |
+| 2 | sysinfo | system telemetry |
+| 3 | net_diag | network diagnostics |
+| 4 | crate_assembler | compile dependency combinations |
+| 5 | crate_kit | static, curated name/description catalog |
+| 6 | crate_analyzer | real Cargo dependency graph |
+| 7 | audio | WAV measurements |
+| 8 | media_meta | audio metadata |
+| 9 | osint | IP/domain lookup through ip-api.com |
+| s | search | fetch and inspect HTML |
+| c | crucible | intentional failure for host testing |
+
+Network plugins contact external services; availability, quotas and API policies
+are outside this project's control. OSINT sends the requested target to ip-api.com.
+The catalog is a starting point, not a guarantee of crate maintenance or quality.
+The terminal UI and plugin messages are in English.
+Network diagnostics use localhost ports 22 and 443 by default. Set
+`XCRATESX_TCP_TARGETS=host:port,other-host:port` to check your own endpoints (up to 16).
+
+## Configuration and diagnostics
+
+`workspace.toml` registers slots; `presets.toml` groups them. Slot keys must be unique,
+single ASCII letters/digits; q, p, r and h are reserved. Binaries must be safe filenames
+and reside beside host_engine.
+
+The default configuration is found relative to the Cargo build directory, then the
+working directory. Set `XCRATESX_CONFIG_DIR` to an absolute directory for a custom installation.
+Set `XCRATESX_LOG_DIR` to choose the plugin stderr directory. Otherwise logs live in
+`$XDG_STATE_HOME/xcratesx`, falling back to `~/.local/state/xcratesx`.
+Each plugin's stderr log is replaced when it starts. Use h to inspect response history.
+
+## Contributing plugins
+
+```sh
+./forge.sh my_tool
+# Optional dependencies:
+./forge.sh my_http_tool reqwest
+cargo build --workspace
+```
+
+The generator creates a package from plugin_template, registers a free keyboard
+shortcut, and builds it in debug mode. Use the debug host while developing, or rebuild
+the release workspace before running the release host. Failed builds leave the scaffold
+available for inspection.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [protocol documentation](shared_contract/README.md),
+and [security notes](SECURITY.md).
+
+## Development checks
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo build --workspace --locked
+python3 scripts/smoke.py
+```
+
+CI runs these checks on Ubuntu. Tests include protocol recovery, configuration consistency,
+real child-process messaging/shutdown, an offline Cargo fixture, and a saved-experiment
+workflow that checks lockfile reuse and compilation of a shared project. Live API behavior
+is not covered by those tests.
+
+## License
+
+[MIT](LICENSE).

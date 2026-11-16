@@ -1,0 +1,13 @@
+[package]
+name = "crate_workbench"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Cargo-backed experiments for XcratesX"
+
+[dependencies]
+shared_contract = { package = "jfp-contract", path = "../shared_contract" }
+tempfile = "3"
+semver = "1"
+serde_json = "1"
+toml = "0.8"

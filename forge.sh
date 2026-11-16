@@ -9,11 +9,36 @@ fi
 
 NAME="$1"
 shift
+
+if ! echo "$NAME" | grep -qE '^[a-z0-9_]+$'; then
+    echo "BLAD: Nazwa pluginu moze zawierac wylacznie male litery, cyfry i podkreslenia (np. net_diag)."
+    exit 1
+fi
+
 DIR="plugin_${NAME}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 if [ -d "$ROOT/$DIR" ]; then
     echo "BLAD: $DIR juz istnieje."
+    exit 1
+fi
+
+# Validate every argument and allocate a shortcut before changing files.
+for CRATE in "$@"; do
+    if ! echo "$CRATE" | grep -qE '^[a-zA-Z][a-zA-Z0-9_-]*$'; then
+        echo "Invalid crate name: $CRATE" >&2
+        exit 1
+    fi
+done
+NEXT_KEY=""
+for KEY in 1 2 3 4 5 6 7 8 9 a b c d e f g i j k l m n o s t u v w x y z; do
+    if ! grep -qE "^key[[:space:]]*=[[:space:]]*\"$KEY\"" "$ROOT/workspace.toml"; then
+        NEXT_KEY="$KEY"
+        break
+    fi
+done
+if [ -z "$NEXT_KEY" ]; then
+    echo "No free plugin shortcut" >&2
     exit 1
 fi
 
@@ -27,6 +52,10 @@ if ! grep -q "\"$DIR\"" "$ROOT/Cargo.toml"; then
 fi
 
 for CRATE in "$@"; do
+    if ! echo "$CRATE" | grep -qE '^[a-zA-Z0-9_\-]+$'; then
+        echo "BLAD: Nieprawidlowa nazwa crate: $CRATE"
+        exit 1
+    fi
     echo ">>> cargo add $CRATE..."
     cargo add "$CRATE" --manifest-path "$ROOT/$DIR/Cargo.toml"
 done
@@ -34,8 +63,6 @@ done
 echo ">>> Buduje $DIR..."
 cargo build -p "plugin_${NAME}" --manifest-path "$ROOT/Cargo.toml"
 
-NEXT_KEY=$(grep -c '^\[\[slot\]\]' "$ROOT/workspace.toml" 2>/dev/null || echo "0")
-NEXT_KEY=$((NEXT_KEY + 1))
 LABEL=$(echo "$NAME" | tr '[:lower:]' '[:upper:]')
 
 if ! grep -q "binary = \"plugin_${NAME}\"" "$ROOT/workspace.toml"; then

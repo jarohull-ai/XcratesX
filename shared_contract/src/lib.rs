@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{BufRead, Read};
 
 pub const JFP_VERSION: &str = "v5.4.0";
 
@@ -34,7 +34,7 @@ impl JfpMessage {
     }
 
     pub fn to_jfp_string(&self) -> String {
-        let mut frame = String::new();
+        let mut frame = String::with_capacity(128 + self.body.len());
 
         frame.push_str(JFP_HEADER);
         frame.push('\n');
@@ -66,18 +66,23 @@ impl JfpMessage {
         let header_end = rest.find(JFP_END_HEADER)?;
         let mut status = String::new();
         let mut intent = None;
+        let mut version = None;
 
         for line in rest[..header_end].lines() {
             let line = line.trim();
 
-            if let Some(value) = line.strip_prefix("STATUS:") {
+            if let Some(value) = line.strip_prefix("VERSION:") {
+                if version.replace(value.trim()).is_some() {
+                    return None;
+                }
+            } else if let Some(value) = line.strip_prefix("STATUS:") {
                 status = value.trim().to_owned();
             } else if let Some(value) = line.strip_prefix("INTENT:") {
                 intent = Some(value.trim().to_owned());
             }
         }
 
-        if status.is_empty() && intent.is_none() {
+        if version != Some(JFP_VERSION) || (status.is_empty() && intent.is_none()) {
             return None;
         }
 
@@ -123,12 +128,38 @@ impl<R: BufRead> JfpReader<R> {
     }
 
     pub fn next_frame(&mut self) -> Option<JfpMessage> {
+        let mut line = String::with_capacity(256);
         loop {
-            let mut line = String::new();
-
-            match self.reader.read_line(&mut line) {
+            line.clear();
+            match self
+                .reader
+                .by_ref()
+                .take((self.max_frame_bytes + 1) as u64)
+                .read_line(&mut line)
+            {
                 Ok(0) | Err(_) => return None,
                 Ok(_) => {}
+            }
+
+            if line.len() > self.max_frame_bytes {
+                self.buffer.clear();
+                self.collecting = false;
+                // Consume the rest without allocating an unbounded line.
+                if !line.ends_with('\n') {
+                    loop {
+                        let chunk = self.reader.fill_buf().ok()?;
+                        if chunk.is_empty() {
+                            return None;
+                        }
+                        let end = chunk.iter().position(|b| *b == b'\n');
+                        let count = end.map_or(chunk.len(), |i| i + 1);
+                        self.reader.consume(count);
+                        if end.is_some() {
+                            break;
+                        }
+                    }
+                }
+                continue;
             }
 
             let marker = line.trim();
@@ -143,6 +174,12 @@ impl<R: BufRead> JfpReader<R> {
             }
 
             self.buffer.push_str(&line);
+
+            if self.buffer.len() > self.max_frame_bytes {
+                self.buffer.clear();
+                self.collecting = false;
+                continue;
+            }
 
             if marker == JFP_END_MESSAGE {
                 let parsed = JfpMessage::parse(&self.buffer);
@@ -169,6 +206,24 @@ mod tests {
     use std::io::Cursor;
 
     use super::{JfpMessage, JfpReader};
+
+    #[test]
+    fn rejects_incompatible_version_and_recovers_after_oversize() {
+        let frame = JfpMessage::reply("OK", "hello").to_jfp_string();
+        assert!(JfpMessage::parse(&frame.replace("v5.4.0", "v999")).is_none());
+        assert!(JfpMessage::parse(&frame.replace("VERSION: v5.4.0\n", "")).is_none());
+        let stream = format!("{}\n{frame}\n", "x".repeat(4096));
+        let mut reader = JfpReader::with_limit(Cursor::new(stream), 256);
+        assert_eq!(reader.next_frame().unwrap().body, "hello");
+    }
+
+    #[test]
+    fn rejects_oversized_frame_even_when_terminated() {
+        let large = JfpMessage::reply("OK", "a\n".repeat(128)).to_jfp_string();
+        let small = JfpMessage::reply("OK", "next").to_jfp_string();
+        let mut reader = JfpReader::with_limit(Cursor::new(format!("{large}\n{small}\n")), 160);
+        assert_eq!(reader.next_frame().unwrap().body, "next");
+    }
 
     #[test]
     fn reply_round_trip() {
@@ -249,5 +304,20 @@ mod tests {
         let frame = reader.next_frame().expect("second header wins");
         assert_eq!(frame.intent.as_deref(), Some("TICK"));
         assert_eq!(frame.body, "3");
+    }
+
+    #[test]
+    fn test_rapid_sequence_reading() {
+        let msg = JfpMessage::reply("OK", "payload-data");
+        let encoded = msg.to_jfp_string();
+        let stream = format!("{encoded}\n{encoded}\n{encoded}\n");
+
+        let mut reader = JfpReader::new(Cursor::new(stream.into_bytes()));
+        for _ in 0..3 {
+            let parsed = reader.next_frame().expect("valid frame");
+            assert_eq!(parsed.status, "OK");
+            assert_eq!(parsed.body, "payload-data");
+        }
+        assert_eq!(reader.next_frame(), None);
     }
 }

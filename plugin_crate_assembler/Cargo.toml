@@ -1,0 +1,8 @@
+[package]
+name = "plugin_crate_assembler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crate_workbench = { path = "../crate_workbench" }
+shared_contract = { package = "jfp-contract", path = "../shared_contract" }
