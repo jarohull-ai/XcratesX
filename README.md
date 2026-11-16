@@ -1,39 +1,39 @@
-# 🦀 XcratesX — Meccano/Lego dla crate'ów
+# 🦀 XcratesX — Meccano/Lego for Crates
 
-## Co to jest?
+## What is it?
 
-**XcratesX** to uniwersalna platforma do **składania, testowania i wdrażania konfiguracji crate'ów** z **crates.io** i **GitHub**. Każda wtyczka to niezależny "układanka" — możesz ją podłączyć do systemu, przetestować i użyć jak klocek z LEGO.
+**XcratesX** is a universal platform for **assembling, testing, and deploying crate configurations** from **crates.io** and **GitHub**. Each plugin is an independent "building block" — you can plug it in, test it, and use it like a LEGO brick.
 
-Projekt powstał z myślą o osobach, które chcą:
-- **eksperymentować z różnymi crate'ami** bez zakłócania głównego projektu,
-- **testować konfiguracje** przed wdrożeniem na produkcję,
-- **tworzyć własne preset-y** pod swoje potrzeby,
-- **dostosować narzędzie do siebie** — każdy użytkownik może dodać własną wtyczkę.
+The project was created for people who want to:
+- **experiment with different crates** without breaking their main project,
+- **test configurations** before deploying to production,
+- **create custom presets** for their own needs,
+- **customize the tool** — every user can add their own plugin.
 
-## Dlaczego powstał?
+## Why was it created?
 
-W ekosystemie Rust brakuje elastycznego narzędzia do **eksperymentowania z crate'ami** w sposób modularny i izolowany. Zazwyczaj:
-- dodawanie crate'ów do Cargo.toml wymaga przebudowania całego projektu,
-- testowanie kombinacji crate'ów jest czasochłonne,
-- nie ma prostego sposobu na "wymienialne moduły" funkcjonalności.
+The Rust ecosystem lacks a flexible tool for **modular and isolated experimentation with crates**. Usually:
+- adding crates to Cargo.toml requires rebuilding the whole project,
+- testing crate combinations is time-consuming,
+- there's no simple way to have "swappable modules" of functionality.
 
-**XcratesX** rozwiązuje ten problem: każda wtyczka działa jako osobny proces, komunikuje się przez protokół **JFP v5.4.0** po stdio, a Ty wybierasz, które wtyczki chcesz uruchomić jednocześnie.
+**XcratesX** solves this problem: each plugin runs as a separate process, communicates via the **JFP v5.4.0** protocol over stdio, and you choose which plugins to run at the same time.
 
-## Co to daje?
+## What does it give you?
 
-| Korzyść | Opis |
-|---------|------|
-| 🧩 **Modularność** | Każda wtyczka to osobny proces — awaria jednej nie psuje reszty |
-| 🔄 **Hot-reload** | Wciśnij `r` w TUI, aby przeładować konfigurację bez restartu |
-| 🎯 **Presety domenowe** | Gotowe zestawy wtyczek do DevOps, Audio, Recon, Meccano |
-| 🔧 **Własne wtyczki** | `./forge.sh <nazwa>` tworzy nową wtyczkę z szablonu |
-| 📦 **Składanie crate'ów** | `plugin_crate_assembler` testuje i raportuje konfiguracje crate'ów |
-| 🔍 **Analiza zależności** | `plugin_crate_analyzer` rysuje graf zależności crate'ów |
-| 📚 **Katalog crate'ów** | `plugin_crate_kit` sugeruje crate'y na podstawie zapytania |
+| Benefit | Description |
+|---------|-------------|
+| 🧩 **Modularity** | Each plugin is a separate process — failure of one doesn't break the rest |
+| 🔄 **Hot-reload** | Press `r` in TUI to reload configuration without restarting |
+| 🎯 **Domain presets** | Ready-made plugin sets for DevOps, Audio, Recon, Meccano |
+| 🔧 **Your own plugins** | `./forge.sh <name>` creates a new plugin from template |
+| 📦 **Crate assembly** | `plugin_crate_assembler` tests and reports crate configurations |
+| 🔍 **Dependency analysis** | `plugin_crate_analyzer` draws crate dependency graphs |
+| 📚 **Crate catalog** | `plugin_crate_kit` suggests crates based on query |
 
-## Jak obsługiwać?
+## How to use it?
 
-### Uruchomienie
+### Running
 
 ```bash
 cd /home/jaro/Work/XcratesX_test
@@ -41,94 +41,94 @@ cargo build --release
 ./target/release/host_engine
 ```
 
-### Skróty klawiszowe (w TUI)
+### Keyboard shortcuts (in TUI)
 
-| Klawisz | Akcja |
-|---------|-------|
-| `↑` / `↓` | Nawigacja po presetach i wtyczkach |
-| `1`-`9` | Szybki wybór wtyczki po numerze |
-| `Enter` | Wybierz preset / wyślij komendę |
-| `Tab` | Tryb komend (wpisz komendę do aktywnej wtyczki) |
-| `p` | Powrót do ekranu wyboru presetów |
-| `r` | Przeładuj `workspace.toml` (hot-reload) |
-| `q` / `Esc` | Wyjście z aplikacji |
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate presets and plugins |
+| `1`-`9` | Quick plugin selection by number |
+| `Enter` | Select preset / send command |
+| `Tab` | Command mode (type command to active plugin) |
+| `p` | Return to preset selection screen |
+| `r` | Reload `workspace.toml` (hot-reload) |
+| `q` / `Esc` | Quit application |
 
-### Przykładowy workflow (preset Meccano)
+### Example workflow (Meccano preset)
 
-1. Uruchom `./target/release/host_engine`
-2. Wybierz preset **Meccano** (slot 4)
-3. Przełącz się na wtyczkę `crate_assembler` (naciśnij `4`)
-4. W trybie komend (`Tab`) wpisz:
+1. Run `./target/release/host_engine`
+2. Select preset **Meccano** (slot 4)
+3. Switch to `crate_assembler` plugin (press `4`)
+4. In command mode (`Tab`) type:
    ```
    test:serde:1, serde_json:1
    ```
-5. Otrzymasz raport: `BUILD OK: serde 1`, `BUILD OK: serde_json 1`
-6. Przełącz się na `crate_analyzer` i wpisz:
+5. You get report: `BUILD OK: serde 1`, `BUILD OK: serde_json 1`
+6. Switch to `crate_analyzer` plugin and type:
    ```
    analyze serde, tokio
    ```
-7. Otrzymasz graf zależności crate'ów
+7. You get crate dependency graph
 
-## Komponenty
+## Components
 
-| Wtyczka | Kategoria | Co robi |
-|---------|-----------|---------|
-| `plugin_crate_assembler` | 🏗️ Składanie | Testuje konfiguracje crate'ów, raportuje wyniki buildów |
-| `plugin_crate_kit` | 📦 Katalog | Sugeruje crate'y na podstawie zapytania (np. `suggest serde`) |
-| `plugin_crate_analyzer` | 🔍 Analiza | Rysuje graf zależności crate'ów (`analyze serde, tokio`) |
-| `plugin_crate_scout` | 🔍 Wyszukiwarka | Przeszukuje crates.io przez REST API |
-| `plugin_sysinfo` | 📊 Telemetria | Monitoruje CPU, RAM, dyski, procesy |
-| `plugin_net_diag` | 🌐 Sieć | Diagnostyka połączeń (Viper ↔ Venom) |
-| `plugin_osint` | 🌍 OSINT | Skanowanie IP/domen przez ip-api.com |
-| `plugin_search` | 🕷️ Scraper | Web scraper — struktura HTML |
-| `plugin_audio` | 🎵 Audio | Analiza plików WAV (peak, RMS, crest) |
-| `plugin_media_meta` | 🎚️ Media | Metadane audio (tagi, bitrate) |
-| `plugin_crucible` | ⚡ Test | Stress-test — celowy crash po 6 tickach |
+| Plugin | Category | What it does |
+|--------|----------|--------------|
+| `plugin_crate_assembler` | 🏗️ Assembly | Tests crate configurations, reports build results |
+| `plugin_crate_kit` | 📦 Catalog | Suggests crates based on query (e.g. `suggest serde`) |
+| `plugin_crate_analyzer` | 🔍 Analysis | Draws crate dependency graph (`analyze serde, tokio`) |
+| `plugin_crate_scout` | 🔍 Search | Searches crates.io via REST API |
+| `plugin_sysinfo` | 📊 Telemetry | Monitors CPU, RAM, disks, processes |
+| `plugin_net_diag` | 🌐 Network | Connection diagnostics (Viper ↔ Venom) |
+| `plugin_osint` | 🌍 OSINT | IP/domain scanning via ip-api.com |
+| `plugin_search` | 🕷️ Scraper | Web scraper — HTML structure |
+| `plugin_audio` | 🎵 Audio | WAV file analysis (peak, RMS, crest) |
+| `plugin_media_meta` | 🎚️ Media | Audio metadata (tags, bitrate) |
+| `plugin_crucible` | ⚡ Test | Stress-test — intentional crash after 6 ticks |
 
-## Presety (gotowe zestawy wtyczek)
+## Presets (ready plugin sets)
 
-| Preset | Do czego służy | Wtyczki |
-|--------|---------------|---------|
-| **DevOps** | Monitoring i skanowanie | osint, scout, sysinfo, net_diag |
-| **Meccano** | Składanie i analiza crate'ów | crate_assembler, crate_kit, crate_analyzer, crate_scout |
-| **Cluster** | Diagnostyka klastra | net_diag, sysinfo, osint |
-| **Audio** | Analiza dźwięku | audio, media_meta |
-| **Recon** | OSINT i przeszukiwanie | osint, search, crate_scout |
-| **Wszystko** | Wszystko naraz | wszystkie zainstalowane wtyczki |
+| Preset | Purpose | Plugins |
+|--------|---------|---------|
+| **DevOps** | Monitoring and scanning | osint, scout, sysinfo, net_diag |
+| **Meccano** | Crate assembly and analysis | crate_assembler, crate_kit, crate_analyzer, crate_scout |
+| **Cluster** | Cluster diagnostics | net_diag, sysinfo, osint |
+| **Audio** | Audio analysis | audio, media_meta |
+| **Recon** | OSINT and searching | osint, search, crate_scout |
+| **Everything** | Everything at once | all installed plugins |
 
-## Protokół JFP v5.4.0
+## JFP v5.4.0 Protocol
 
-Wszystkie wtyczki komunikują się przez standard **JFP v5.4.0** po stdio:
+All plugins communicate via **JFP v5.4.0** standard over stdio:
 
 ```
 [JFP_HEADER]
 VERSION: v5.4.0
-STATUS: OK          ← odpowiedź (plugin → host)
-INTENT: COMMAND     ← żądanie (host → plugin)
+STATUS: OK          ← response (plugin → host)
+INTENT: COMMAND     ← request (host → plugin)
 [END_HEADER]
 [MESSAGE_BODY]
-treść komendy
+command content
 [END_MESSAGE]
 ```
 
-## Nowa wtyczka (forge.sh)
+## New plugin (forge.sh)
 
-Tworzenie własnej wtyczki w jednej komendzie:
+Create your own plugin in one command:
 
 ```bash
-./forge.sh <nazwa> [crate1 crate2 ...]
+./forge.sh <name> [crate1 crate2 ...]
 
-# Przykład:
+# Example:
 ./forge.sh recon reqwest scraper
 ```
 
-To skopiuje szablon, doda zależności, zarejestruje w `workspace.toml` i zbuduje wtyczkę.
+This copies the template, adds dependencies, registers it in `workspace.toml`, and builds the plugin.
 
-## Architektura
+## Architecture
 
 ```
                     ┌─────────────┐
-                    │ presets.toml │  ← presety domenowe
+                    │ presets.toml │  ← domain presets
                     └──────┬──────┘
                            │
 ┌──────────────────────────▼───────────────────────────┐
@@ -142,10 +142,10 @@ To skopiuje szablon, doda zależności, zarejestruje w `workspace.toml` i zbuduj
  CrateAss  SCOUT  SYSINFO CLUSTER OSINT  SEARCH MEDIA
 ```
 
-## Licencja
+## License
 
-MIT — zobacz plik `LICENSE`.
+MIT — see `LICENSE` file.
 
 ---
 
-*Budowane dla Ciebie — dostosuj do swoich potrzeb, rozwijaj, dziel się!*
+*Built for you — customize to your needs, develop, share!*
