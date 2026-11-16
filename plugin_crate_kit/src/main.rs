@@ -141,7 +141,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
         "COMMAND" => {
             let input = frame.body.trim();
             if input.is_empty() {
-                return Some(JfpMessage::reply("OK", "podaj wyszukiwankę: suggest serde"));
+                return Some(JfpMessage::reply("OK", "Search the catalog: suggest serde"));
             }
             if let Some(query) = input.strip_prefix("suggest ") {
                 let q = query.trim();
@@ -150,10 +150,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                 return Some(JfpMessage::reply("OK", result));
             }
             if input.is_empty() {
-                return Some(JfpMessage::reply(
-                    "OK",
-                    "crate_kit | podaj: suggest <query>",
-                ));
+                return Some(JfpMessage::reply("OK", "CATALOG | Use: suggest <query>"));
             }
             Some(JfpMessage::reply(
                 "OK",
@@ -166,7 +163,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
             }
             Some(JfpMessage::reply(
                 "OK",
-                "crate_kit | gotowe. wpisz: suggest <query>",
+                "CATALOG | Use: suggest <query>; :add NAME:VERSION saves a selection",
             ))
         }
         _ => None,

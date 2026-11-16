@@ -52,7 +52,7 @@ async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
         Err(e) => {
             let mut guard = state.lock().await;
             if guard.target == target {
-                guard.scan = ScanState::Error(format!("Blad konfiguracji klienta HTTP: {e}"));
+                guard.scan = ScanState::Error(format!("HTTP client configuration error: {e}"));
             }
             return;
         }
@@ -74,11 +74,11 @@ async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
                 guard.scan = ScanState::Finished(formatted);
             }
             Err(err) => {
-                guard.scan = ScanState::Error(format!("Blad parsowania JSON: {err}"));
+                guard.scan = ScanState::Error(format!("JSON parsing failed: {err}"));
             }
         },
         Err(err) => {
-            guard.scan = ScanState::Error(format!("Blad HTTP (timeout/polaczenie): {err}"));
+            guard.scan = ScanState::Error(format!("HTTP error (timeout/connection): {err}"));
         }
     }
 }
@@ -87,13 +87,13 @@ fn handle_command(target: &str, state: &mut OsintState) -> JfpMessage {
     let target = target.trim();
 
     if target.is_empty() {
-        return JfpMessage::reply("OK", "OSINT | Pusty cel - podaj adres IP lub domene.");
+        return JfpMessage::reply("OK", "OSINT | Enter an IP address or domain.");
     }
 
     if !is_valid_target(target) {
         return JfpMessage::reply(
             "ERROR",
-            "OSINT | Nieprawidlowy format celu (dozwolone tylko litery, cyfry, kropki, myslniki).",
+            "OSINT | Invalid target (letters, digits, dots, hyphens and IPv6 colons only).",
         );
     }
 
@@ -102,30 +102,27 @@ fn handle_command(target: &str, state: &mut OsintState) -> JfpMessage {
 
     JfpMessage::reply(
         "OK",
-        format!("OSINT | Cel zablokowany: {target}. Rozpoczynam skanowanie..."),
+        format!("OSINT | Target: {target}. Starting lookup..."),
     )
 }
 
 fn handle_tick(state: &OsintState) -> JfpMessage {
     match &state.scan {
-        ScanState::Idle => JfpMessage::reply(
-            "OK",
-            "OSINT | System gotowy. Podaj cel w wierszu polecen (np. 8.8.8.8)",
-        ),
+        ScanState::Idle => {
+            JfpMessage::reply("OK", "OSINT | Ready. Enter an IP or domain (e.g. 8.8.8.8)")
+        }
         ScanState::Scanning => JfpMessage::reply(
             "WAIT",
-            format!(
-                "OSINT | Cel zablokowany: {}. Asynchroniczne skanowanie w toku...",
-                state.target
-            ),
+            format!("OSINT | Target: {}. Lookup in progress...", state.target),
         ),
         ScanState::Finished(data) => JfpMessage::reply(
             "OK",
-            format!("OSINT | Raport dla {}:\n{data}", state.target),
+            format!("OSINT | Report for {}:\n{data}", state.target),
         ),
-        ScanState::Error(err) => {
-            JfpMessage::reply("ERROR", format!("OSINT | Blad dla {}: {err}", state.target))
-        }
+        ScanState::Error(err) => JfpMessage::reply(
+            "ERROR",
+            format!("OSINT | Error for {}: {err}", state.target),
+        ),
     }
 }
 

@@ -1,29 +1,29 @@
 [[preset]]
 name = "DevOps"
-description = "Skanowanie sieci, monitoring, szukanie crate'ów"
+description = "Network diagnostics, monitoring and crate discovery"
 slots = ["plugin_osint", "plugin_crate_scout", "plugin_sysinfo", "plugin_net_diag"]
 
 [[preset]]
 name = "Meccano"
-description = "Mechanizm składania i testowania konfiguracji crate'ów"
+description = "Discover crates, save experiments, build and inspect dependencies"
 slots = ["plugin_crate_assembler", "plugin_crate_scout", "plugin_crate_kit", "plugin_crate_analyzer"]
 
 [[preset]]
 name = "Cluster"
-description = "Diagnostyka klastra i monitoring maszyn (Viper + Venom)"
+description = "Connectivity diagnostics and system monitoring"
 slots = ["plugin_net_diag", "plugin_sysinfo", "plugin_osint"]
 
 [[preset]]
 name = "Audio"
-description = "Analiza WAV, metadane audio"
+description = "WAV measurements and audio metadata"
 slots = ["plugin_audio", "plugin_media_meta"]
 
 [[preset]]
 name = "Recon"
-description = "OSINT, web scraping, przeszukiwanie"
+description = "IP lookup, HTML inspection and crate discovery"
 slots = ["plugin_osint", "plugin_search", "plugin_crate_scout"]
 
 [[preset]]
 name = "Everything"
-description = "Wszystkie zainstalowane pluginy"
+description = "All installed plugins"
 slots = []

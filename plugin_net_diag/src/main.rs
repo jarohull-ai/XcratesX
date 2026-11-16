@@ -26,34 +26,36 @@ fn check_tcp_port(addr_str: &str, timeout: Duration) -> (bool, u128, String) {
                     }
                 }
             } else {
-                (false, 0, "Brak prawidlowego adresu IP".to_string())
+                (false, 0, "No valid IP address".to_string())
             }
         }
-        Err(e) => (false, 0, format!("Blad rozwiazywania adresu: {e}")),
+        Err(e) => (false, 0, format!("Address resolution failed: {e}")),
     }
 }
 
 fn run_cluster_diagnostic() -> String {
     let mut out = String::new();
-    out.push_str("=== DIAGNOSTYKA WEZLOW KLASTRA (Dual-Node JFP) ===\n");
+    out.push_str("=== TCP CONNECTIVITY CHECK ===\n");
 
-    let targets = [
-        ("Viper Local (LM Studio 9B)", "127.0.0.1:1234"),
-        ("Venom Tunel (LM Studio 2B)", "127.0.0.1:1235"),
-        ("Venom Kabel (SSH 10.42.0.2:22)", "10.42.0.2:22"),
-        ("Viper Kabel (SSH 10.42.0.1:22)", "10.42.0.1:22"),
-    ];
+    let configured = std::env::var("XCRATESX_TCP_TARGETS")
+        .unwrap_or_else(|_| "127.0.0.1:22,127.0.0.1:443".into());
+    let targets = configured
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .take(16);
 
-    for (name, addr) in targets {
+    for addr in targets {
+        let name = addr;
         let (ok, micros, desc) = check_tcp_port(addr, Duration::from_millis(500));
         let badge = if ok { "[OK]   " } else { "[FAIL] " };
         let latency_ms = micros as f64 / 1000.0;
         out.push_str(&format!(
-            "{badge} {name:<32} -> {desc} (latencja: {latency_ms:.2} ms)\n"
+            "{badge} {name:<32} -> {desc} (latency: {latency_ms:.2} ms)\n"
         ));
     }
 
-    out.push_str("\nKomendy: check | ping <ip>:<port> | port <ip> <port> | help");
+    out.push_str("\nCommands: check | ping <ip>:<port> | port <ip> <port> | help");
     out
 }
 
@@ -66,7 +68,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
             if parts.is_empty() {
                 return Some(JfpMessage::reply(
                     "OK",
-                    "NET_DIAG | Wpisz komende: check, ping <host:port>, port <host> <port>, help",
+                    "NET_DIAG | Enter a command: check, ping <host:port>, port <host> <port>, help",
                 ));
             }
 
@@ -79,7 +81,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                 }
                 "ping" => {
                     if parts.len() < 2 {
-                        Some(JfpMessage::reply("ERROR", "Uzycie: ping <host:port>"))
+                        Some(JfpMessage::reply("ERROR", "Usage: ping <host:port>"))
                     } else {
                         let target = parts[1];
                         let addr = if target.contains(':') {
@@ -90,14 +92,14 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                         let (ok, micros, desc) = check_tcp_port(&addr, Duration::from_millis(800));
                         let status = if ok { "OK" } else { "FAIL" };
                         let ms = micros as f64 / 1000.0;
-                        let body = format!("NET_DIAG PING [{status}] {addr} -> {desc} | czas: {ms:.3} ms");
+                        let body = format!("NET_DIAG PING [{status}] {addr} -> {desc} | time: {ms:.3} ms");
                         state.last_report = Some(body.clone());
                         Some(JfpMessage::reply(status, body))
                     }
                 }
                 "port" => {
                     if parts.len() < 3 {
-                        Some(JfpMessage::reply("ERROR", "Uzycie: port <host> <port>"))
+                        Some(JfpMessage::reply("ERROR", "Usage: port <host> <port>"))
                     } else {
                         let host = parts[1];
                         let port = parts[2];
@@ -105,23 +107,23 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                         let (ok, micros, desc) = check_tcp_port(&target, Duration::from_millis(800));
                         let status = if ok { "OK" } else { "FAIL" };
                         let ms = micros as f64 / 1000.0;
-                        let body = format!("NET_DIAG PORT [{status}] {target} -> {desc} | czas: {ms:.3} ms");
+                        let body = format!("NET_DIAG PORT [{status}] {target} -> {desc} | time: {ms:.3} ms");
                         state.last_report = Some(body.clone());
                         Some(JfpMessage::reply(status, body))
                     }
                 }
                 "help" => Some(JfpMessage::reply(
                     "OK",
-                    "NET_DIAG Pomoc:\n\
-                     - check           : pelna diagnostyka lacza Viper <-> Venom i portow LM Studio\n\
-                     - ping <ip:port>  : test reachability i latencji w mikrosekundach\n\
-                     - port <ip> <nr>  : szybki test danego portu TCP\n\
-                     - help            : ten komunikat",
+                    "NET_DIAG Help:\n\
+                     - check           : check XCRATESX_TCP_TARGETS (default: localhost ports 22 and 443)\n\
+                     - ping <ip:port>  : TCP reachability and latency in microseconds\n\
+                     - port <ip> <nr>  : check a TCP port\n\
+                     - help            : show this help",
                 )),
                 other => {
                     Some(JfpMessage::reply(
                         "ERROR",
-                        format!("NET_DIAG | Nieznana komenda: '{other}'. Wpisz 'help'."),
+                        format!("NET_DIAG | Unknown command: '{other}'. Enter 'help'."),
                     ))
                 }
             }
@@ -132,7 +134,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                 Some(JfpMessage::reply(
                     "OK",
                     format!(
-                        "NET_DIAG (Tick #{}) | Ostatni wynik:\n{report}",
+                        "NET_DIAG (Tick #{}) | Last result:\n{report}",
                         state.check_count
                     ),
                 ))
@@ -140,7 +142,7 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                 Some(JfpMessage::reply(
                     "OK",
                     format!(
-                        "NET_DIAG (Tick #{}) | Lacze aktywne. Wpisz 'check' aby przeskanowac klaster.",
+                        "NET_DIAG (Tick #{}) | Ready. Enter 'check' to test configured targets.",
                         state.check_count
                     ),
                 ))
@@ -181,7 +183,7 @@ mod tests {
         let mut state = State::default();
         let resp = handle(&req, &mut state).expect("response");
         assert_eq!(resp.status, "OK");
-        assert!(resp.body.contains("NET_DIAG Pomoc"));
+        assert!(resp.body.contains("NET_DIAG Help"));
     }
 
     #[test]

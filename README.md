@@ -14,7 +14,7 @@ Install stable Rust with Cargo, a C/C++ linker, Git, and standard Linux build to
 Some dependencies you experiment with may require additional system libraries.
 
 ```sh
-git clone https://github.com/jarohull-ai/XcratesX.git
+git clone --branch meccano-crate-set https://github.com/jarohull-ai/XcratesX.git
 cd XcratesX
 cargo build --workspace --release --locked
 ./target/release/host_engine
@@ -23,9 +23,44 @@ cargo build --workspace --release --locked
 Choose a preset using arrows and Enter. Use the slot keys shown in the footer to
 select a plugin: 1–9, s (web search), c (intentional crash test).
 Tab enters command mode; Enter submits; Esc leaves command mode.
-Outside command mode: p opens presets, r reloads the full slot configuration,
+Outside command mode: p opens presets, r reloads the slot configuration,
 h toggles the last 32 distinct responses, q exits. Arrows/PageUp/PageDown scroll output.
-Reload currently restores all slots, even after selecting a narrower preset.
+Reload preserves the selected preset. Configuration errors are reported without replacing it.
+
+## Saved experiments: discovery to reproducible build
+
+Press Tab and enter one command at a time, from any plugin:
+
+```text
+:new json-tools
+:add serde:1, serde_json:1
+:build
+:graph
+:show
+```
+
+`:build` and `:graph` select the appropriate plugin automatically. On a later launch,
+use `:list` and `:use json-tools` to resume. `:remove serde` removes a dependency;
+`:add serde:=1.0.228` changes its requirement. `:help` lists all experiment commands.
+Search in Scout (1), inspect `info serde`, then use `:add NAME:VERSION` to save your choice.
+
+Experiments are saved under `$XDG_DATA_HOME/xcratesx` or `~/.local/share/xcratesx`.
+Override the location with `XCRATESX_DATA_DIR`. Each named directory contains dependency
+requirements, a generated Cargo project, Cargo.lock after resolution, and build/graph reports.
+Copy that directory to share it; recipients can run `cargo build --locked` inside it.
+Editing dependencies invalidates the old lockfile and reports. Subsequent build/graph runs
+reuse the lockfile with `--locked`. Do not edit generated source files: dependency edits
+regenerate them. Only one saved-experiment operation can run at once; locks are released
+automatically when a process exits. Switching away during a build cancels the job.
+
+The same commands work without the TUI:
+
+```sh
+./target/release/host_engine --experiment ':new json-tools'
+./target/release/host_engine --experiment ':add serde:1, serde_json:1'
+./target/release/host_engine --experiment ':build'
+./target/release/host_engine --check-config
+```
 
 ## Real crate experiments
 
@@ -85,7 +120,9 @@ are currently supported by the assembler.
 Network plugins contact external services; availability, quotas and API policies
 are outside this project's control. OSINT sends the requested target to ip-api.com.
 The catalog is a starting point, not a guarantee of crate maintenance or quality.
-Some existing plugin messages and UI labels remain Polish.
+The terminal UI and plugin messages are in English.
+Network diagnostics use localhost ports 22 and 443 by default. Set
+`XCRATESX_TCP_TARGETS=host:port,other-host:port` to check your own endpoints (up to 16).
 
 ## Configuration and diagnostics
 
@@ -123,10 +160,12 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo build --workspace --locked
+python3 scripts/smoke.py
 ```
 
 CI runs these checks on Ubuntu. Tests include protocol recovery, configuration consistency,
-real child-process messaging/shutdown, and an offline Cargo fixture. Live API behavior
+real child-process messaging/shutdown, an offline Cargo fixture, and a saved-experiment
+workflow that checks lockfile reuse and compilation of a shared project. Live API behavior
 is not covered by those tests.
 
 ## License

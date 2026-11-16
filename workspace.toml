@@ -6,64 +6,64 @@
 key = "1"
 label = "SCOUT"
 binary = "plugin_crate_scout"
-description = "Wyszukiwarka crates.io i GitHub"
+description = "Search crates.io packages"
 
 [[slot]]
 key = "2"
 label = "SYSINFO"
 binary = "plugin_sysinfo"
-description = "Telemetria wydajności — CPU, RAM, dyski, procesy"
+description = "CPU, memory, disks and processes"
 
 [[slot]]
 key = "3"
 label = "CLUSTER"
 binary = "plugin_net_diag"
-description = "Diagnostyka połączenia Viper (PC) <-> Venom (Laptop)"
+description = "TCP connectivity diagnostics"
 
 [[slot]]
 key = "4"
-label = "CUBES"
+label = "BUILDER"
 binary = "plugin_crate_assembler"
-description = "Mekkańsko-Lego dla crate'ów — składanie i testowanie konfiguracji"
+description = "Build and save dependency experiments"
 
 [[slot]]
 key = "5"
-label = "CUBES2"
+label = "CATALOG"
 binary = "plugin_crate_kit"
-description = "Zbiór rekomendowanych crate'ów do wyboru"
+description = "Browse the curated crate catalog"
 
 [[slot]]
 key = "6"
-label = "ANALIZA"
+label = "ANALYZER"
 binary = "plugin_crate_analyzer"
-description = "Analiza grafów zależności crate'ów"
+description = "Inspect resolved Cargo dependency graphs"
 
 [[slot]]
 key = "7"
 label = "AUDIO"
 binary = "plugin_audio"
-description = "Analiza plików WAV — peak, RMS, crest"
+description = "WAV measurements: peak, RMS, crest"
 
 [[slot]]
 key = "8"
 label = "MEDIA"
 binary = "plugin_media_meta"
-description = "Wczytywanie metadanych audio (tagi, bitrate)"
+description = "Audio tags and bitrate"
 
 [[slot]]
 key = "9"
 label = "OSINT"
 binary = "plugin_osint"
-description = "Skanowanie IP/domen przez ip-api.com"
+description = "IP/domain lookup via ip-api.com"
 
 [[slot]]
 key = "s"
 label = "SEARCH"
 binary = "plugin_search"
-description = "Web scraper struktur HTML"
+description = "Inspect HTML structure"
 
 [[slot]]
 key = "c"
 label = "CRUCIBLE"
 binary = "plugin_crucible"
-description = "Stress-test: celowy crash po 6 tickach"
+description = "Intentional crash after 6 ticks"

@@ -65,8 +65,8 @@ fn load_presets() -> Vec<PresetEntry> {
         }
     }
     vec![PresetEntry {
-        name: "Wszystko".into(),
-        description: "Wszystkie zainstalowane pluginy".into(),
+        name: "Everything".into(),
+        description: "All installed plugins".into(),
         slots: vec![],
     }]
 }
@@ -119,87 +119,69 @@ fn is_safe_binary_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+fn parse_plugins(content: &str) -> Result<Vec<PluginSpec>, String> {
+    let config: ConfigFile =
+        toml::from_str(content).map_err(|e| format!("Invalid workspace.toml: {e}"))?;
+    let mut keys = HashSet::new();
+    let mut binaries = HashSet::new();
+    let mut plugins = Vec::new();
+    for entry in config.slot {
+        let key = entry.key.chars().next().ok_or("Empty slot shortcut")?;
+        if !is_safe_binary_name(&entry.binary)
+            || entry.key.chars().count() != 1
+            || "qprh".contains(key)
+            || !key.is_ascii_alphanumeric()
+            || !keys.insert(key)
+            || !binaries.insert(entry.binary.clone())
+        {
+            return Err(format!(
+                "Invalid or duplicate slot: {} ({})",
+                entry.label, entry.key
+            ));
+        }
+        plugins.push(PluginSpec {
+            binary: entry.binary,
+            label: entry.label,
+            key,
+            description: entry.description,
+        });
+    }
+    if plugins.is_empty() {
+        return Err("workspace.toml has no slots".into());
+    }
+    Ok(plugins)
+}
+fn load_plugins_checked() -> Result<Vec<PluginSpec>, String> {
+    let path = config_path();
+    let content = fs::read_to_string(&path).map_err(|e| {
+        format!(
+            "{}: {e}. Set XCRATESX_CONFIG_DIR if needed.",
+            path.display()
+        )
+    })?;
+    parse_plugins(&content)
+}
 fn load_plugins() -> Vec<PluginSpec> {
-    let config_path = config_path();
-
-    if let Ok(content) = fs::read_to_string(&config_path) {
-        if let Ok(config) = toml::from_str::<ConfigFile>(&content) {
-            let mut keys = HashSet::new();
-            let mut binaries = HashSet::new();
-            let plugins: Vec<PluginSpec> = config
-                .slot
-                .into_iter()
-                .filter_map(|entry| {
-                    if !is_safe_binary_name(&entry.binary) {
-                        return None;
-                    }
-                    let key = entry.key.chars().next()?;
-                    if entry.key.chars().count() != 1
-                        || "qprh".contains(key)
-                        || !key.is_ascii_alphanumeric()
-                        || !keys.insert(key)
-                        || !binaries.insert(entry.binary.clone())
-                    {
-                        eprintln!("Ignoring invalid or duplicate slot: {}", entry.label);
-                        return None;
-                    }
-                    Some(PluginSpec {
-                        binary: entry.binary,
-                        label: entry.label,
-                        key,
-                        description: entry.description,
-                    })
-                })
-                .collect();
-
-            if !plugins.is_empty() {
-                return plugins;
+    load_plugins_checked().unwrap_or_default()
+}
+fn validate_configuration() -> Result<(), String> {
+    let plugins = load_plugins_checked()?;
+    let raw = fs::read_to_string(presets_path()).map_err(|e| format!("presets.toml: {e}"))?;
+    let presets: PresetsFile = toml::from_str(&raw).map_err(|e| format!("presets.toml: {e}"))?;
+    if presets.preset.is_empty() {
+        return Err("No presets configured".into());
+    }
+    for preset in presets.preset {
+        for slot in preset.slots {
+            if !plugins.iter().any(|p| p.binary == slot) {
+                return Err(format!(
+                    "Preset {} references unknown plugin {slot}",
+                    preset.name
+                ));
             }
         }
     }
-
-    default_plugins()
-}
-
-fn default_plugins() -> Vec<PluginSpec> {
-    vec![
-        PluginSpec {
-            binary: "plugin_osint".into(),
-            label: "OSINT".into(),
-            key: '1',
-            description: String::new(),
-        },
-        PluginSpec {
-            binary: "plugin_search".into(),
-            label: "SEARCH".into(),
-            key: '2',
-            description: String::new(),
-        },
-        PluginSpec {
-            binary: "plugin_audio".into(),
-            label: "AUDIO".into(),
-            key: '3',
-            description: String::new(),
-        },
-        PluginSpec {
-            binary: "plugin_writing".into(),
-            label: "WRITING".into(),
-            key: '4',
-            description: String::new(),
-        },
-        PluginSpec {
-            binary: "plugin_music".into(),
-            label: "MUSIC".into(),
-            key: '5',
-            description: String::new(),
-        },
-        PluginSpec {
-            binary: "plugin_crucible".into(),
-            label: "CRUCIBLE".into(),
-            key: '9',
-            description: String::new(),
-        },
-    ]
+    Ok(())
 }
 
 fn config_path() -> PathBuf {
@@ -230,7 +212,7 @@ fn read_frames(stdout: ChildStdout, sender: SyncSender<JfpMessage>) {
     if reader.is_incomplete() {
         let _ = sender.send(JfpMessage::reply(
             "CRASH",
-            "Proces potomny zgasl niespodziewanie (EOF) z niedomknieta ramka JFP.",
+            "Plugin exited with an incomplete JFP frame.",
         ));
     } else {
         let _ = sender.send(JfpMessage::reply(
@@ -275,7 +257,7 @@ impl PluginProcess {
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| io::Error::other("brak stdin"))?;
+            .ok_or_else(|| io::Error::other("missing stdin"))?;
         // A plugin that stops reading must not freeze the terminal event loop.
         let fd = stdin.as_raw_fd();
         let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
@@ -289,7 +271,7 @@ impl PluginProcess {
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| io::Error::other("brak stdout"))?;
+            .ok_or_else(|| io::Error::other("missing stdout"))?;
 
         let (sender, output) = mpsc::sync_channel(64);
 
@@ -349,6 +331,8 @@ enum KeyAction {
 }
 
 struct Engine {
+    local_response: Option<JfpMessage>,
+    preset_slots: Vec<String>,
     history: VecDeque<JfpMessage>,
     show_history: bool,
     target: PathBuf,
@@ -369,6 +353,8 @@ struct Engine {
 impl Engine {
     fn new(plugins: Vec<PluginSpec>) -> Self {
         let mut engine = Self {
+            local_response: Some(JfpMessage::reply("OK", crate_workbench::experiments::HELP)),
+            preset_slots: Vec::new(),
             history: VecDeque::new(),
             show_history: false,
             target: target_dir(),
@@ -404,7 +390,7 @@ impl Engine {
             }
             Err(err) => {
                 self.process = None;
-                self.fault = Some(format!("nie mozna uruchomic {}: {err}", path.display()));
+                self.fault = Some(format!("cannot start {}: {err}", path.display()));
             }
         }
     }
@@ -423,10 +409,21 @@ impl Engine {
     }
 
     fn reload_config(&mut self) {
-        let new_plugins = load_plugins();
+        self.local_response = None;
+        let loaded = match load_plugins_checked() {
+            Ok(plugins) => plugins,
+            Err(error) => {
+                self.local_response = Some(JfpMessage::reply("ERROR", error));
+                return;
+            }
+        };
+        let new_plugins = loaded
+            .into_iter()
+            .filter(|p| self.preset_slots.is_empty() || self.preset_slots.contains(&p.binary))
+            .collect::<Vec<_>>();
 
         if new_plugins.is_empty() {
-            self.fault = Some("Reload: brak slotow w workspace.toml".into());
+            self.fault = Some("Reload: no slots in workspace.toml".into());
             return;
         }
 
@@ -443,7 +440,7 @@ impl Engine {
         self.message = Some(JfpMessage::reply(
             "OK",
             format!(
-                "CONFIG RELOAD | Zaladowano {} slotow z workspace.toml",
+                "CONFIG RELOAD | Loaded {} slots from workspace.toml",
                 self.plugins.len()
             ),
         ));
@@ -454,6 +451,7 @@ impl Engine {
     }
 
     fn switch_by_key(&mut self, key: char) {
+        self.local_response = None;
         let Some(index) = self.plugins.iter().position(|p| p.key == key) else {
             return;
         };
@@ -520,6 +518,11 @@ impl Engine {
 
     fn submit_command(&mut self) {
         let body = std::mem::take(&mut self.input_buffer);
+        self.local_response = None;
+        if body.trim().starts_with(':') {
+            self.experiment_command(body.trim());
+            return;
+        }
         let frame = JfpMessage::request("COMMAND", body);
 
         let sent = match self.process.as_mut() {
@@ -536,6 +539,44 @@ impl Engine {
                     self.fault = Some(format!("stdin: {err}"));
                 }
             }
+        }
+    }
+
+    fn experiment_command(&mut self, command: &str) {
+        if command == ":build" || command == ":graph" {
+            let (binary, body) = if command == ":build" {
+                ("plugin_crate_assembler", "test:@saved")
+            } else {
+                ("plugin_crate_analyzer", "analyze @saved")
+            };
+            if !self.plugins.iter().any(|p| p.binary == binary) {
+                if let Some(plugin) = load_plugins().into_iter().find(|p| p.binary == binary) {
+                    self.plugins.push(plugin);
+                }
+            }
+            if let Some(key) = self
+                .plugins
+                .iter()
+                .find(|p| p.binary == binary)
+                .map(|p| p.key)
+            {
+                self.switch_by_key(key);
+                self.input_buffer = body.into();
+                self.submit_command();
+            } else {
+                self.local_response = Some(JfpMessage::reply(
+                    "ERROR",
+                    "Required workbench plugin is missing from workspace.toml.",
+                ));
+            }
+        } else {
+            let result = crate_workbench::experiments::Store::default_location()
+                .and_then(|store| store.command(command));
+            self.local_response = Some(match result {
+                Ok(body) => JfpMessage::reply("OK", body),
+                Err(error) => JfpMessage::reply("ERROR", error),
+            });
+            self.scroll_offset = 0;
         }
     }
 
@@ -597,6 +638,7 @@ impl Engine {
                 KeyAction::Continue
             }
             KeyCode::Char('h') if !self.command_mode => {
+                self.local_response = None;
                 self.show_history = !self.show_history;
                 self.scroll_offset = 0;
                 KeyAction::Continue
@@ -625,6 +667,9 @@ impl Engine {
     }
 
     fn status(&self) -> &str {
+        if let Some(reply) = &self.local_response {
+            return &reply.status;
+        }
         if self.fault.is_some() {
             return "ERROR";
         }
@@ -636,6 +681,9 @@ impl Engine {
     }
 
     fn body(&self) -> String {
+        if let Some(reply) = &self.local_response {
+            return reply.body.clone();
+        }
         if self.show_history {
             return self
                 .history
@@ -645,12 +693,12 @@ impl Engine {
                 .join("\n\n");
         }
         if let Some(fault) = &self.fault {
-            return format!("{}: BLAD. {fault}", self.active().label);
+            return format!("{}: ERROR. {fault}", self.active().label);
         }
 
         match &self.message {
             Some(message) => message.body.clone(),
-            None => String::from("(czekam na ramke JFP z procesu...)"),
+            None => String::from("Waiting for plugin response..."),
         }
     }
 
@@ -668,7 +716,7 @@ impl Engine {
             .join(" ");
 
         format!(
-            "{} | {} | tick:{} rx:{} pid:{} | {} | p:presety r:reload q:quit",
+            "{} | {} | tick:{} rx:{} pid:{} | {} | p:presets r:reload h:history q:quit",
             self.active().label,
             self.status(),
             self.tick_count,
@@ -726,7 +774,7 @@ fn render(frame: &mut Frame, engine: &mut Engine) {
 
     let block = Block::default()
         .title(format!(
-            "JFP SILNIK :: {} :: {} :: {JFP_VERSION}{scroll_hint}",
+            "XcratesX :: {} :: {} :: {JFP_VERSION}{scroll_hint}",
             engine.active().label,
             status,
         ))
@@ -755,9 +803,12 @@ fn render(frame: &mut Frame, engine: &mut Engine) {
     );
 
     let (command_title, command_color) = if engine.command_mode {
-        (" KOMENDA :: ENTER wysyla :: TAB sterowanie ", Color::Cyan)
+        (" COMMAND :: ENTER send :: TAB navigate ", Color::Cyan)
     } else {
-        (" KOMENDA :: TAB aby pisac ", Color::DarkGray)
+        (
+            " COMMAND :: TAB to type :: :help experiments ",
+            Color::DarkGray,
+        )
     };
 
     let command_block = Block::default()
@@ -822,7 +873,7 @@ fn render_presets(frame: &mut Frame, presets: &[PresetEntry], selected: usize) {
 
     let block = Block::default()
         .title(format!(
-            " XcratesX — Co chcesz dziś robić? :: {JFP_VERSION} "
+            " XcratesX — Choose your workspace :: {JFP_VERSION} "
         ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -861,7 +912,7 @@ fn render_presets(frame: &mut Frame, presets: &[PresetEntry], selected: usize) {
     frame.render_widget(Paragraph::new(lines).alignment(Alignment::Left), body_area);
 
     frame.render_widget(
-        Paragraph::new(Line::from("↑↓ nawigacja | Enter wybierz | q wyjście"))
+        Paragraph::new(Line::from("↑↓ navigate | Enter select | q quit"))
             .style(Style::default().fg(Color::DarkGray)),
         footer_area,
     );
@@ -923,6 +974,34 @@ impl Drop for TerminalCleanup {
 }
 
 fn main() -> io::Result<()> {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if !args.is_empty() {
+        if args == ["--help"] || args == ["-h"] {
+            println!("XcratesX\n\nRun without arguments for the terminal UI.\n--experiment ':COMMAND' runs a saved-experiment command without a terminal.\n\n{}", crate_workbench::experiments::HELP);
+            return Ok(());
+        }
+        if args == ["--check-config"] {
+            validate_configuration().map_err(io::Error::other)?;
+            for plugin in load_plugins_checked().map_err(io::Error::other)? {
+                if !target_dir().join(&plugin.binary).is_file() {
+                    return Err(io::Error::other(format!(
+                        "Missing {}. Run cargo build --workspace.",
+                        plugin.binary
+                    )));
+                }
+            }
+            println!("Configuration and plugin binaries: OK");
+            return Ok(());
+        }
+        if args.len() == 2 && args[0] == "--experiment" {
+            let result =
+                crate_workbench::experiments::command(&args[1]).map_err(io::Error::other)?;
+            println!("{result}");
+            return Ok(());
+        }
+        return Err(io::Error::other("Unknown arguments. Use --help."));
+    }
+    validate_configuration().map_err(io::Error::other)?;
     let presets = load_presets();
     let _cleanup = TerminalCleanup;
     let mut terminal = init_terminal()?;
@@ -942,6 +1021,7 @@ fn main() -> io::Result<()> {
         }
 
         let mut engine = Engine::new(plugins);
+        engine.preset_slots = presets[idx].slots.clone();
         let result = run(&mut terminal, &mut engine)?;
         engine.stop_plugin();
 
@@ -958,6 +1038,17 @@ fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_duplicate_multichar_and_reserved_slots() {
+        for key in ["10", "q", "", "/"] {
+            let input = format!("[[slot]]\nkey = {key:?}\nlabel = 'test'\nbinary = 'plugin_test'");
+            assert!(parse_plugins(&input).is_err());
+        }
+        let slot = "[[slot]]\nkey = '1'\nlabel = 'test'\nbinary = 'plugin_test'\n";
+        assert!(parse_plugins(&format!("{slot}{slot}")).is_err());
+        assert!(parse_plugins("slot = []").is_err());
+    }
 
     #[test]
     fn shipped_slots_are_unique_and_built() {

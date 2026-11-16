@@ -13,7 +13,7 @@ fn main() {
     while let Some(frame) = reader.next_frame() {
         match frame.intent.as_deref() {
             Some("COMMAND") => {
-                let message = JfpMessage::reply("OK", "Przyjeto komende");
+                let message = JfpMessage::reply("OK", "Command received");
 
                 if writeln!(stdout, "{}", message.to_jfp_string()).is_err() {
                     break;

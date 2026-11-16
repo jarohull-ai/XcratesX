@@ -33,7 +33,7 @@ fn format_bytes(bytes: u64) -> String {
 }
 
 fn overview(sys: &System) -> String {
-    let mut out = String::from("SYSINFO | Przegląd systemu\n\n");
+    let mut out = String::from("SYSINFO | System overview\n\n");
 
     let os_name = System::name().unwrap_or_default();
     let os_ver = System::os_version().unwrap_or_default();
@@ -62,7 +62,7 @@ fn overview(sys: &System) -> String {
 
     let _ = writeln!(out, "  System:   {os_name} {os_ver}");
     let _ = writeln!(out, "  Host:     {host}");
-    let _ = writeln!(out, "  CPU:      {cpu_name} ({cores} rdzeni)");
+    let _ = writeln!(out, "  CPU:      {cpu_name} ({cores} cores)");
     let _ = writeln!(
         out,
         "  RAM:      {} / {} ({mem_pct:.1}%)",
@@ -75,11 +75,11 @@ fn overview(sys: &System) -> String {
         format_bytes(used_swap),
         format_bytes(total_swap)
     );
-    let _ = writeln!(out, "  Dyski:    {} zamontowanych", disks.list().len());
-    let _ = writeln!(out, "  Sieć:     {} interfejsów", networks.list().len());
+    let _ = writeln!(out, "  Disks:    {} mounted", disks.list().len());
+    let _ = writeln!(out, "  Network:     {} interfaces", networks.list().len());
     let _ = writeln!(
         out,
-        "\n  Komendy: cpu | mem | disk | net | proc <nazwa> | all | help"
+        "\n  Commands: cpu | mem | disk | net | proc <name> | all | help"
     );
 
     out
@@ -96,22 +96,22 @@ fn cpu_report(sys: &System) -> String {
     let cores = sys.cpus().len();
 
     let _ = writeln!(out, "  Model:    {name}");
-    let _ = writeln!(out, "  Rdzenie:  {cores}");
+    let _ = writeln!(out, "  Cores:  {cores}");
 
     if let Some(cpu) = sys.cpus().first() {
-        let _ = writeln!(out, "  Czest.:   {} MHz", cpu.frequency());
+        let _ = writeln!(out, "  Freq.:   {} MHz", cpu.frequency());
     }
 
     let _ = writeln!(out);
     for (i, cpu) in sys.cpus().iter().enumerate() {
-        let _ = writeln!(out, "  Rdzen {:>2}: {:>5.1}%", i, cpu.cpu_usage());
+        let _ = writeln!(out, "  Core {:>2}: {:>5.1}%", i, cpu.cpu_usage());
     }
 
     out
 }
 
 fn mem_report(sys: &System) -> String {
-    let mut out = String::from("SYSINFO | Pamięć\n\n");
+    let mut out = String::from("SYSINFO | Memory\n\n");
 
     let total = sys.total_memory();
     let used = sys.used_memory();
@@ -128,7 +128,7 @@ fn mem_report(sys: &System) -> String {
         format_bytes(used),
         format_bytes(total)
     );
-    let _ = writeln!(out, "  Dostępna: {}", format_bytes(avail));
+    let _ = writeln!(out, "  Available: {}", format_bytes(avail));
     let _ = writeln!(
         out,
         "  Swap:     {} / {}",
@@ -140,7 +140,7 @@ fn mem_report(sys: &System) -> String {
 }
 
 fn disk_report() -> String {
-    let mut out = String::from("SYSINFO | Dyski\n\n");
+    let mut out = String::from("SYSINFO | Disks\n\n");
     let disks = Disks::new_with_refreshed_list();
 
     for disk in disks.list() {
@@ -161,7 +161,7 @@ fn disk_report() -> String {
         );
         let _ = writeln!(
             out,
-            "    {} / {} ({pct:.1}% użyte)\n",
+            "    {} / {} ({pct:.1}% used)\n",
             format_bytes(used),
             format_bytes(total)
         );
@@ -171,7 +171,7 @@ fn disk_report() -> String {
 }
 
 fn net_report() -> String {
-    let mut out = String::from("SYSINFO | Sieć\n\n");
+    let mut out = String::from("SYSINFO | Network\n\n");
     let networks = Networks::new_with_refreshed_list();
 
     for (name, data) in networks.list() {
@@ -184,14 +184,14 @@ fn net_report() -> String {
     }
 
     if networks.list().is_empty() {
-        out.push_str("  (brak interfejsów)\n");
+        out.push_str("  (no interfaces)\n");
     }
 
     out
 }
 
 fn proc_report(sys: &System, name: &str) -> String {
-    let mut out = format!("SYSINFO | Procesy: \"{name}\"\n\n");
+    let mut out = format!("SYSINFO | Processes: \"{name}\"\n\n");
 
     let mut found = 0u32;
     for (pid, proc_info) in sys.processes() {
@@ -214,9 +214,9 @@ fn proc_report(sys: &System, name: &str) -> String {
     }
 
     if found == 0 {
-        let _ = writeln!(out, "  Nie znaleziono procesów pasujących do \"{name}\"");
+        let _ = writeln!(out, "  No processes matching \"{name}\"");
     } else {
-        let _ = writeln!(out, "\n  Znaleziono: {found}");
+        let _ = writeln!(out, "\n  Found: {found}");
     }
 
     out
@@ -224,14 +224,14 @@ fn proc_report(sys: &System, name: &str) -> String {
 
 fn help_text() -> String {
     String::from(
-        "SYSINFO | Dostępne komendy\n\n\
-         \x20 all          Pełny przegląd systemu\n\
-         \x20 cpu          Informacje o procesorze\n\
-         \x20 mem          Pamięć RAM i swap\n\
-         \x20 disk         Zamontowane dyski\n\
-         \x20 net          Interfejsy sieciowe\n\
-         \x20 proc <nazwa> Szukaj procesów po nazwie\n\
-         \x20 help         Ta lista komend",
+        "SYSINFO | Available commands\n\n\
+         \x20 all          System overview\n\
+         \x20 cpu          CPU information\n\
+         \x20 mem          RAM and swap\n\
+         \x20 disk         Mounted disks\n\
+         \x20 net          Network interfaces\n\
+         \x20 proc <name> Find processes by name\n\
+         \x20 help         Show this help",
     )
 }
 
@@ -254,9 +254,9 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
                     "help" => help_text(),
                     other => {
                         if other.starts_with("proc") {
-                            String::from("SYSINFO | Użycie: proc <nazwa_procesu>")
+                            String::from("SYSINFO | Usage: proc <process_name>")
                         } else {
-                            format!("SYSINFO | Nieznana komenda: \"{other}\". Wpisz \"help\".")
+                            format!("SYSINFO | Unknown command: \"{other}\". Enter \"help\".")
                         }
                     }
                 },

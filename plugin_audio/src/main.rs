@@ -14,19 +14,19 @@ const MAX_WAV_BYTES: u64 = 500 * 1024 * 1024; // 500 MB limit
 
 fn analyze_wav(path: &Path) -> Result<String, String> {
     if !path.is_file() {
-        return Err("Sciezka nie istnieje lub nie jest zwyklym plikiem.".into());
+        return Err("Path is missing or not a regular file.".into());
     }
 
     if let Ok(meta) = fs::metadata(path) {
         if meta.len() > MAX_WAV_BYTES {
             return Err(format!(
-                "Plik przekracza limit bezpieczenstwa ({} MB > 500 MB).",
+                "File exceeds size limit ({} MB > 500 MB).",
                 meta.len() / (1024 * 1024)
             ));
         }
     }
 
-    let reader = hound::WavReader::open(path).map_err(|e| format!("Nie mozna otworzyc: {e}"))?;
+    let reader = hound::WavReader::open(path).map_err(|e| format!("Cannot open: {e}"))?;
 
     let spec = reader.spec();
     let num_samples = reader.len() as u64;
@@ -44,16 +44,16 @@ fn analyze_wav(path: &Path) -> Result<String, String> {
     let ms = ((duration_secs.fract()) * 1000.0) as u64;
 
     let mut report = String::new();
-    report.push_str(&format!("PLIK: {}\n", path.display()));
+    report.push_str(&format!("FILE: {}\n", path.display()));
     report.push_str(&format!("FORMAT: {:?}\n", spec.sample_format));
-    report.push_str(&format!("KANALY: {}\n", spec.channels));
+    report.push_str(&format!("CHANNELS: {}\n", spec.channels));
     report.push_str(&format!("SAMPLE RATE: {} Hz\n", spec.sample_rate));
-    report.push_str(&format!("BITY: {}\n", spec.bits_per_sample));
+    report.push_str(&format!("BITS: {}\n", spec.bits_per_sample));
     report.push_str(&format!(
-        "PROBKI: {} (na kanal: {})\n",
+        "SAMPLES: {} (per channel: {})\n",
         num_samples, samples_per_channel
     ));
-    report.push_str(&format!("CZAS: {min:02}:{sec:02}.{ms:03}"));
+    report.push_str(&format!("DURATION: {min:02}:{sec:02}.{ms:03}"));
 
     let peak_rms = compute_peak_rms(path, &spec);
     if let Some((peak, rms)) = peak_rms {
@@ -125,10 +125,7 @@ fn handle(frame: &JfpMessage, state: &mut AudioState) -> Option<JfpMessage> {
             let path_str = frame.body.trim();
 
             if path_str.is_empty() {
-                return Some(JfpMessage::reply(
-                    "OK",
-                    "AUDIO | Podaj sciezke do pliku WAV.",
-                ));
+                return Some(JfpMessage::reply("OK", "AUDIO | Enter a WAV file path."));
             }
 
             let path = Path::new(path_str);
@@ -139,7 +136,7 @@ fn handle(frame: &JfpMessage, state: &mut AudioState) -> Option<JfpMessage> {
                     state.last_error = None;
                     Some(JfpMessage::reply(
                         "OK",
-                        format!("AUDIO | Analiza zakonczona:\n{report}"),
+                        format!("AUDIO | Analysis complete:\n{report}"),
                     ))
                 }
                 Err(err) => {
@@ -153,17 +150,17 @@ fn handle(frame: &JfpMessage, state: &mut AudioState) -> Option<JfpMessage> {
             if let Some(report) = &state.last_report {
                 Some(JfpMessage::reply(
                     "OK",
-                    format!("AUDIO | Ostatnia analiza:\n{report}"),
+                    format!("AUDIO | Last analysis:\n{report}"),
                 ))
             } else if let Some(err) = &state.last_error {
                 Some(JfpMessage::reply(
                     "ERROR",
-                    format!("AUDIO | Ostatni blad: {err}"),
+                    format!("AUDIO | Last error: {err}"),
                 ))
             } else {
                 Some(JfpMessage::reply(
                     "OK",
-                    "AUDIO | Gotowy. Podaj sciezke do pliku WAV w wierszu polecen.",
+                    "AUDIO | Ready. Enter a WAV file path.",
                 ))
             }
         }

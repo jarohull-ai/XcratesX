@@ -1,4 +1,5 @@
 use shared_contract::{JfpMessage, JfpReader};
+pub mod experiments;
 use std::{
     collections::BTreeMap,
     fs,
@@ -108,6 +109,9 @@ fn cargo(path: &Path, args: &[&str]) -> Result<String, String> {
     read(stdout)
 }
 pub fn assemble(input: &str) -> Result<String, String> {
+    if input == "@saved" {
+        return experiments::run_saved(false);
+    }
     let deps = dependencies(input)?;
     let dir = project(&deps)?;
     cargo(&dir.path().join("Cargo.toml"), &["build", "--quiet"])?;
@@ -163,6 +167,9 @@ fn graph(raw: &str) -> Result<String, String> {
     ))
 }
 pub fn analyze(input: &str) -> Result<String, String> {
+    if input == "@saved" {
+        return experiments::run_saved(true);
+    }
     if let Some(path) = input.strip_prefix("path ") {
         let manifest = fs::canonicalize(path.trim()).map_err(|e| e.to_string())?;
         return graph(&cargo(
