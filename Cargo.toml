@@ -2,14 +2,15 @@
 members = [
     "host_engine",
     "shared_contract",
-    "plugin_osint",
-    "plugin_audio",
-    "plugin_crucible",
-    "plugin_search",
+    "plugin_crate_assembler",
+    "plugin_crate_kit",
+    "plugin_crate_analyzer",
     "plugin_crate_scout",
-    "plugin_sysinfo",
+    "plugin_crucible",
     "plugin_media_meta",
     "plugin_net_diag",
-    "plugin_crate_assembler",
+    "plugin_osint",
+    "plugin_search",
+    "plugin_sysinfo",
 ]
 resolver = "2"
