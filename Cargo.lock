@@ -1535,6 +1535,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin_crate_assembler"
+version = "0.1.0"
+dependencies = [
+ "jfp-contract",
+]
+
+[[package]]
 name = "plugin_crate_scout"
 version = "0.1.0"
 dependencies = [

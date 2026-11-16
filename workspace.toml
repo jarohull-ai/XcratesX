@@ -1,11 +1,12 @@
-# XcratesX: The Rust Lab & Launcher
-# Dynamic workspace configuration with Multi-Bank scaling
+# XcratesX: The Meccano/Lego for Crates
+# Universal base for assembling and testing crate configurations
+# (c) Jaro - open source, customizable by every user
 
 [[slot]]
 key = "1"
 label = "SCOUT"
 binary = "plugin_crate_scout"
-description = "Silnik wyszukiwarki crates.io & GitHub"
+description = "Wyszukiwarka crates.io i GitHub"
 
 [[slot]]
 key = "2"
@@ -20,45 +21,43 @@ binary = "plugin_net_diag"
 description = "Diagnostyka połączenia Viper (PC) <-> Venom (Laptop)"
 
 [[slot]]
+key = "4"
+label = "CUBES"
+binary = "plugin_crate_assembler"
+description = "Mekkańsko-Lego dla crate'ów — składanie i testowanie konfiguracji"
+
+[[slot]]
+key = "5"
+label = "AUDIO"
+binary = "plugin_audio"
+description = "Analiza plików WAV — peak, RMS, crest"
+
+[[slot]]
+key = "6"
+label = "MEDIA"
+binary = "plugin_media_meta"
+description = "Wczytywanie metadanych audio (tagi, bitrate)"
+
+[[slot]]
 key = "7"
-label = "RODIO"
-binary = "plugin_rodio"
-description = "Autonomicznie zamontowany silnik audio rodio v0.19.0 (Sink / Mixer)"
-
-# === BANK C: AI & VECTOR (SLOTY 13-18) ===
+label = "OSINT"
+binary = "plugin_osint"
+description = "Skanowanie IP/domen przez ip-api.com"
 
 [[slot]]
-key = "13"
-label = "BURN_CORE"
-binary = "plugin_burn_core"
-description = "Silnik tensorów i graf automatycznego różniczkowania (Autodiff)"
+key = "8"
+label = "SEARCH"
+binary = "plugin_search"
+description = "Web scraper struktur HTML"
 
 [[slot]]
-key = "14"
-label = "TOKENIZERS"
-binary = "plugin_tokenizers"
-description = "Wielowątkowy tokenizator BPE (Hugging Face w Rust) — słownik 32k"
+key = "9"
+label = "CRUCIBLE"
+binary = "plugin_crucible"
+description = "Stress-test: celowy crash po 6 tickach"
 
 [[slot]]
-key = "15"
-label = "SAFETENSORS"
-binary = "plugin_safetensors"
-description = "Bezpieczny format wag i checkpointów modelu z mmap zero-copy"
-
-[[slot]]
-key = "16"
-label = "CUBECL"
-binary = "plugin_cubecl"
-description = "Kompilator kerneli GPU w Rust pod architekturę AMD Navi / WGPU"
-
-[[slot]]
-key = "17"
-label = "VENOM_STREAM"
-binary = "plugin_venom_stream"
-description = "Odbiornik batchy danych przesyłanych gigabitem z laptopa Venom"
-
-[[slot]]
-key = "18"
-label = "TRAIN_REPL"
-binary = "plugin_train_repl"
-description = "Konsola telemetryczna procesu uczenia (Loss, Perplexity, Checkpoints)"
+key = "10"
+label = "SCOUT"
+binary = "plugin_crate_scout"
+description = "Wyszukiwarka crates.io przez REST API"

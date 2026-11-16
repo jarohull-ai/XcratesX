@@ -4,6 +4,11 @@ description = "Skanowanie sieci, monitoring, szukanie crate'ów"
 slots = ["plugin_osint", "plugin_crate_scout", "plugin_sysinfo", "plugin_net_diag"]
 
 [[preset]]
+name = "Meccano"
+description = "Mechanizm składania i testowania konfiguracji crate'ów"
+slots = ["plugin_crate_assembler", "plugin_crate_scout", "plugin_sysinfo"]
+
+[[preset]]
 name = "Cluster"
 description = "Diagnostyka klastra i monitoring maszyn (Viper + Venom)"
 slots = ["plugin_net_diag", "plugin_sysinfo", "plugin_osint"]

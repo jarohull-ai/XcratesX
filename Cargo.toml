@@ -10,5 +10,6 @@ members = [
     "plugin_sysinfo",
     "plugin_media_meta",
     "plugin_net_diag",
+    "plugin_crate_assembler",
 ]
 resolver = "2"
