@@ -1,8 +1,11 @@
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::io::{self, BufReader, Stdout, Write};
+use std::os::fd::AsRawFd;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -38,6 +41,9 @@ struct PresetsFile {
 }
 
 fn presets_path() -> PathBuf {
+    if let Some(dir) = std::env::var_os("XCRATESX_CONFIG_DIR") {
+        return PathBuf::from(dir).join("presets.toml");
+    }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let candidate = dir.join("../../presets.toml");
@@ -108,7 +114,9 @@ fn is_safe_binary_name(name: &str) -> bool {
         && !name.contains('\\')
         && !name.contains("..")
         && Path::new(name).is_relative()
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 fn load_plugins() -> Vec<PluginSpec> {
@@ -116,6 +124,8 @@ fn load_plugins() -> Vec<PluginSpec> {
 
     if let Ok(content) = fs::read_to_string(&config_path) {
         if let Ok(config) = toml::from_str::<ConfigFile>(&content) {
+            let mut keys = HashSet::new();
+            let mut binaries = HashSet::new();
             let plugins: Vec<PluginSpec> = config
                 .slot
                 .into_iter()
@@ -124,6 +134,15 @@ fn load_plugins() -> Vec<PluginSpec> {
                         return None;
                     }
                     let key = entry.key.chars().next()?;
+                    if entry.key.chars().count() != 1
+                        || "qprh".contains(key)
+                        || !key.is_ascii_alphanumeric()
+                        || !keys.insert(key)
+                        || !binaries.insert(entry.binary.clone())
+                    {
+                        eprintln!("Ignoring invalid or duplicate slot: {}", entry.label);
+                        return None;
+                    }
                     Some(PluginSpec {
                         binary: entry.binary,
                         label: entry.label,
@@ -184,6 +203,9 @@ fn default_plugins() -> Vec<PluginSpec> {
 }
 
 fn config_path() -> PathBuf {
+    if let Some(dir) = std::env::var_os("XCRATESX_CONFIG_DIR") {
+        return PathBuf::from(dir).join("workspace.toml");
+    }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let candidate = dir.join("../../workspace.toml");
@@ -196,7 +218,7 @@ fn config_path() -> PathBuf {
     PathBuf::from("workspace.toml")
 }
 
-fn read_frames(stdout: ChildStdout, sender: Sender<JfpMessage>) {
+fn read_frames(stdout: ChildStdout, sender: SyncSender<JfpMessage>) {
     let mut reader = JfpReader::new(BufReader::new(stdout));
 
     while let Some(message) = reader.next_frame() {
@@ -210,6 +232,11 @@ fn read_frames(stdout: ChildStdout, sender: Sender<JfpMessage>) {
             "CRASH",
             "Proces potomny zgasl niespodziewanie (EOF) z niedomknieta ramka JFP.",
         ));
+    } else {
+        let _ = sender.send(JfpMessage::reply(
+            "CRASH",
+            "Plugin closed stdout. See plugin stderr log.",
+        ));
     }
 }
 
@@ -222,22 +249,49 @@ struct PluginProcess {
 
 impl PluginProcess {
     fn spawn(executable: &Path) -> io::Result<Self> {
+        let log_dir = std::env::var_os("XCRATESX_LOG_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::var_os("XDG_STATE_HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| {
+                        PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+                            .join(".local/state")
+                    })
+                    .join("xcratesx")
+            });
+        fs::create_dir_all(&log_dir)?;
+        let name = executable
+            .file_name()
+            .ok_or_else(|| io::Error::other("missing plugin name"))?;
+        let log = fs::File::create(log_dir.join(format!("{}.stderr.log", name.to_string_lossy())))?;
         let mut child = Command::new(executable)
+            .process_group(0)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(log)
             .spawn()?;
 
         let stdin = child
             .stdin
             .take()
             .ok_or_else(|| io::Error::other("brak stdin"))?;
+        // A plugin that stops reading must not freeze the terminal event loop.
+        let fd = stdin.as_raw_fd();
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags == -1 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1
+        {
+            let error = io::Error::last_os_error();
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
         let stdout = child
             .stdout
             .take()
             .ok_or_else(|| io::Error::other("brak stdout"))?;
 
-        let (sender, output) = mpsc::channel();
+        let (sender, output) = mpsc::sync_channel(64);
 
         let reader = thread::spawn(move || read_frames(stdout, sender));
 
@@ -259,19 +313,22 @@ impl PluginProcess {
     }
 
     fn latest(&self) -> Option<JfpMessage> {
-        let mut latest = None;
-
-        while let Ok(message) = self.output.try_recv() {
-            latest = Some(message);
-        }
-
-        latest
+        self.output.try_recv().ok()
     }
 
     fn shutdown(&mut self) {
-        let _ = self.stdin.flush();
+        if self.reader.is_none() {
+            return;
+        }
+        // Each plugin starts a separate process group. Include Cargo descendants.
+        unsafe {
+            libc::kill(-(self.child.id() as i32), libc::SIGKILL);
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
+
+        // Disconnect a reader blocked on a full queue before joining it.
+        self.output = mpsc::channel().1;
 
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
@@ -292,6 +349,8 @@ enum KeyAction {
 }
 
 struct Engine {
+    history: VecDeque<JfpMessage>,
+    show_history: bool,
     target: PathBuf,
     plugins: Vec<PluginSpec>,
     active_index: usize,
@@ -310,6 +369,8 @@ struct Engine {
 impl Engine {
     fn new(plugins: Vec<PluginSpec>) -> Self {
         let mut engine = Self {
+            history: VecDeque::new(),
+            show_history: false,
             target: target_dir(),
             active_index: 0,
             plugins,
@@ -444,7 +505,13 @@ impl Engine {
 
     fn drain(&mut self) {
         if let Some(process) = self.process.as_ref() {
-            if let Some(message) = process.latest() {
+            while let Some(message) = process.latest() {
+                if self.history.back() != Some(&message) {
+                    if self.history.len() == 32 {
+                        self.history.pop_front();
+                    }
+                    self.history.push_back(message.clone());
+                }
                 self.message = Some(message);
                 self.frames = self.frames.wrapping_add(1);
             }
@@ -529,8 +596,13 @@ impl Engine {
                 self.reload_config();
                 KeyAction::Continue
             }
+            KeyCode::Char('h') if !self.command_mode => {
+                self.show_history = !self.show_history;
+                self.scroll_offset = 0;
+                KeyAction::Continue
+            }
             KeyCode::Char(character) if self.command_mode => {
-                if !character.is_control() {
+                if !character.is_control() && self.input_buffer.len() < 2048 {
                     self.input_buffer.push(character);
                 }
                 KeyAction::Continue
@@ -564,6 +636,14 @@ impl Engine {
     }
 
     fn body(&self) -> String {
+        if self.show_history {
+            return self
+                .history
+                .iter()
+                .map(|m| format!("[{}]\n{}", m.status, m.body))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+        }
         if let Some(fault) = &self.fault {
             return format!("{}: BLAD. {fault}", self.active().label);
         }
@@ -675,10 +755,7 @@ fn render(frame: &mut Frame, engine: &mut Engine) {
     );
 
     let (command_title, command_color) = if engine.command_mode {
-        (
-            " KOMENDA :: ENTER wysyla :: TAB sterowanie ",
-            Color::Cyan,
-        )
+        (" KOMENDA :: ENTER wysyla :: TAB sterowanie ", Color::Cyan)
     } else {
         (" KOMENDA :: TAB aby pisac ", Color::DarkGray)
     };
@@ -744,7 +821,9 @@ fn render_presets(frame: &mut Frame, presets: &[PresetEntry], selected: usize) {
     let area = frame.area();
 
     let block = Block::default()
-        .title(format!(" XcratesX — Co chcesz dziś robić? :: {JFP_VERSION} "))
+        .title(format!(
+            " XcratesX — Co chcesz dziś robić? :: {JFP_VERSION} "
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(Color::Cyan));
@@ -768,22 +847,22 @@ fn render_presets(frame: &mut Frame, presets: &[PresetEntry], selected: usize) {
         };
 
         lines.push(Line::styled(
-            format!("{marker}{}. {} — {}", i + 1, preset.name, preset.description),
+            format!(
+                "{marker}{}. {} — {}",
+                i + 1,
+                preset.name,
+                preset.description
+            ),
             style,
         ));
         lines.push(Line::from(""));
     }
 
-    frame.render_widget(
-        Paragraph::new(lines).alignment(Alignment::Left),
-        body_area,
-    );
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Left), body_area);
 
     frame.render_widget(
-        Paragraph::new(Line::from(
-            "↑↓ nawigacja | Enter wybierz | q wyjście",
-        ))
-        .style(Style::default().fg(Color::DarkGray)),
+        Paragraph::new(Line::from("↑↓ nawigacja | Enter wybierz | q wyjście"))
+            .style(Style::default().fg(Color::DarkGray)),
         footer_area,
     );
 }
@@ -835,8 +914,17 @@ fn run_preset_select(
     }
 }
 
+struct TerminalCleanup;
+impl Drop for TerminalCleanup {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+    }
+}
+
 fn main() -> io::Result<()> {
     let presets = load_presets();
+    let _cleanup = TerminalCleanup;
     let mut terminal = init_terminal()?;
 
     loop {
@@ -870,6 +958,65 @@ fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shipped_slots_are_unique_and_built() {
+        let config: ConfigFile = toml::from_str(include_str!("../../workspace.toml")).unwrap();
+        let workspace: toml::Value = toml::from_str(include_str!("../../Cargo.toml")).unwrap();
+        let members = workspace["workspace"]["members"].as_array().unwrap();
+        let mut keys = HashSet::new();
+        let mut binaries = HashSet::new();
+        for slot in config.slot {
+            assert_eq!(slot.key.chars().count(), 1);
+            assert!(!"qprh".contains(&slot.key));
+            assert!(keys.insert(slot.key));
+            assert!(binaries.insert(slot.binary.clone()));
+            assert!(members.iter().any(|m| m.as_str() == Some(&slot.binary)));
+        }
+        let presets: PresetsFile = toml::from_str(include_str!("../../presets.toml")).unwrap();
+        for preset in presets.preset {
+            assert!(preset.slots.iter().all(|s| binaries.contains(s)));
+        }
+    }
+
+    #[test]
+    fn process_round_trip_and_shutdown_with_full_queue() {
+        // cat echoes valid requests, exercising actual pipes and frame parsing.
+        let mut child = Command::new("cat")
+            .process_group(0)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdin = child.stdin.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let (tx, output) = mpsc::sync_channel(1);
+        let reader = thread::spawn(move || read_frames(stdout, tx));
+        let mut process = PluginProcess {
+            child,
+            stdin,
+            output,
+            reader: Some(reader),
+        };
+        process
+            .send_frame(&JfpMessage::request("COMMAND", "hello"))
+            .unwrap();
+        assert_eq!(
+            process
+                .output
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .body,
+            "hello"
+        );
+        for _ in 0..5 {
+            process
+                .send_frame(&JfpMessage::request("TICK", "1"))
+                .unwrap();
+        }
+        process.shutdown();
+        assert!(process.child.try_wait().unwrap().is_some());
+    }
 
     #[test]
     fn test_is_safe_binary_name() {

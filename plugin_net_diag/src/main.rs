@@ -48,7 +48,9 @@ fn run_cluster_diagnostic() -> String {
         let (ok, micros, desc) = check_tcp_port(addr, Duration::from_millis(500));
         let badge = if ok { "[OK]   " } else { "[FAIL] " };
         let latency_ms = micros as f64 / 1000.0;
-        out.push_str(&format!("{badge} {name:<32} -> {desc} (latencja: {latency_ms:.2} ms)\n"));
+        out.push_str(&format!(
+            "{badge} {name:<32} -> {desc} (latencja: {latency_ms:.2} ms)\n"
+        ));
     }
 
     out.push_str("\nKomendy: check | ping <ip>:<port> | port <ip> <port> | help");
@@ -129,7 +131,10 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
             if let Some(report) = &state.last_report {
                 Some(JfpMessage::reply(
                     "OK",
-                    format!("NET_DIAG (Tick #{}) | Ostatni wynik:\n{report}", state.check_count),
+                    format!(
+                        "NET_DIAG (Tick #{}) | Ostatni wynik:\n{report}",
+                        state.check_count
+                    ),
                 ))
             } else {
                 Some(JfpMessage::reply(

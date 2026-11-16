@@ -1,5 +1,4 @@
 use std::io::{self, Write};
-use std::time::Duration;
 
 use shared_contract::{JfpMessage, JfpReader};
 
@@ -9,7 +8,7 @@ struct State {
 }
 
 fn suggest_crates(query: &str) -> String {
-    let mut crates = vec![
+    let crates = [
         ("serde", "Serialize/Deserialize"),
         ("serde_json", "JSON serialization"),
         ("tokio", "Async runtime"),
@@ -127,7 +126,11 @@ fn suggest_crates(query: &str) -> String {
 
     crates
         .iter()
-        .filter(|(name, _)| name.contains(&query) || query.is_empty())
+        .filter(|(name, description)| {
+            name.contains(query)
+                || description.to_lowercase().contains(&query.to_lowercase())
+                || query.is_empty()
+        })
         .take(10)
         .map(|(n, d)| format!("  • {n} - {d}"))
         .collect()
@@ -140,22 +143,31 @@ fn handle(frame: &JfpMessage, state: &mut State) -> Option<JfpMessage> {
             if input.is_empty() {
                 return Some(JfpMessage::reply("OK", "podaj wyszukiwankę: suggest serde"));
             }
-            if input.starts_with("suggest ") {
-                let q = &input[8..].trim();
+            if let Some(query) = input.strip_prefix("suggest ") {
+                let q = query.trim();
                 let result = suggest_crates(q);
                 state.last_output = Some(result.clone());
                 return Some(JfpMessage::reply("OK", result));
             }
             if input.is_empty() {
-                return Some(JfpMessage::reply("OK", "crate_kit | podaj: suggest <query>"));
+                return Some(JfpMessage::reply(
+                    "OK",
+                    "crate_kit | podaj: suggest <query>",
+                ));
             }
-            Some(JfpMessage::reply("OK", format!("crate_kit | received: {input}")))
+            Some(JfpMessage::reply(
+                "OK",
+                format!("crate_kit | received: {input}"),
+            ))
         }
         "TICK" => {
             if let Some(out) = &state.last_output {
                 return Some(JfpMessage::reply("OK", out));
             }
-            Some(JfpMessage::reply("OK", "crate_kit | gotowe. wpisz: suggest <query>"))
+            Some(JfpMessage::reply(
+                "OK",
+                "crate_kit | gotowe. wpisz: suggest <query>",
+            ))
         }
         _ => None,
     }
@@ -168,8 +180,14 @@ fn main() {
     let mut state = State::default();
 
     while let Some(frame) = reader.next_frame() {
-        let Some(msg) = handle(&frame, &mut state) else { continue; };
-        if writeln!(stdout, "{}", msg.to_jfp_string()).is_err() { break; }
-        if stdout.flush().is_err() { break; }
+        let Some(msg) = handle(&frame, &mut state) else {
+            continue;
+        };
+        if writeln!(stdout, "{}", msg.to_jfp_string()).is_err() {
+            break;
+        }
+        if stdout.flush().is_err() {
+            break;
+        }
     }
 }

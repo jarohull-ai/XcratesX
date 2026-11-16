@@ -24,6 +24,6 @@ description = "OSINT, web scraping, przeszukiwanie"
 slots = ["plugin_osint", "plugin_search", "plugin_crate_scout"]
 
 [[preset]]
-name = "Wszystko"
+name = "Everything"
 description = "Wszystkie zainstalowane pluginy"
 slots = []

@@ -204,18 +204,15 @@ fn handle_tick(state: &SearchState) -> JfpMessage {
             "OK",
             "SEARCH | Gotowy. Podaj URL w wierszu polecen (np. crates.io)",
         ),
-        ScrapeState::Fetching => JfpMessage::reply(
-            "WAIT",
-            format!("SEARCH | Pobieranie: {} ...", state.url),
-        ),
-        ScrapeState::Done(data) => JfpMessage::reply(
-            "OK",
-            format!("SEARCH | Wynik dla {}:\n{data}", state.url),
-        ),
-        ScrapeState::Error(err) => JfpMessage::reply(
-            "ERROR",
-            format!("SEARCH | Blad dla {}: {err}", state.url),
-        ),
+        ScrapeState::Fetching => {
+            JfpMessage::reply("WAIT", format!("SEARCH | Pobieranie: {} ...", state.url))
+        }
+        ScrapeState::Done(data) => {
+            JfpMessage::reply("OK", format!("SEARCH | Wynik dla {}:\n{data}", state.url))
+        }
+        ScrapeState::Error(err) => {
+            JfpMessage::reply("ERROR", format!("SEARCH | Blad dla {}: {err}", state.url))
+        }
     }
 }
 

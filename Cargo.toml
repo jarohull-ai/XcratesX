@@ -1,5 +1,7 @@
 [workspace]
 members = [
+    "crate_workbench",
+    "plugin_audio",
     "host_engine",
     "shared_contract",
     "plugin_crate_assembler",

@@ -49,7 +49,10 @@ fn analyze_wav(path: &Path) -> Result<String, String> {
     report.push_str(&format!("KANALY: {}\n", spec.channels));
     report.push_str(&format!("SAMPLE RATE: {} Hz\n", spec.sample_rate));
     report.push_str(&format!("BITY: {}\n", spec.bits_per_sample));
-    report.push_str(&format!("PROBKI: {} (na kanal: {})\n", num_samples, samples_per_channel));
+    report.push_str(&format!(
+        "PROBKI: {} (na kanal: {})\n",
+        num_samples, samples_per_channel
+    ));
     report.push_str(&format!("CZAS: {min:02}:{sec:02}.{ms:03}"));
 
     let peak_rms = compute_peak_rms(path, &spec);
@@ -142,10 +145,7 @@ fn handle(frame: &JfpMessage, state: &mut AudioState) -> Option<JfpMessage> {
                 Err(err) => {
                     state.last_error = Some(err.clone());
                     state.last_report = None;
-                    Some(JfpMessage::reply(
-                        "ERROR",
-                        format!("AUDIO | {err}"),
-                    ))
+                    Some(JfpMessage::reply("ERROR", format!("AUDIO | {err}")))
                 }
             }
         }

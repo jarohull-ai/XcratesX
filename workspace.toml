@@ -57,19 +57,13 @@ binary = "plugin_osint"
 description = "Skanowanie IP/domen przez ip-api.com"
 
 [[slot]]
-key = "10"
+key = "s"
 label = "SEARCH"
 binary = "plugin_search"
 description = "Web scraper struktur HTML"
 
 [[slot]]
-key = "11"
+key = "c"
 label = "CRUCIBLE"
 binary = "plugin_crucible"
 description = "Stress-test: celowy crash po 6 tickach"
-
-[[slot]]
-key = "10"
-label = "SCOUT"
-binary = "plugin_crate_scout"
-description = "Wyszukiwarka crates.io przez REST API"

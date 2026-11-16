@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 shared_contract = { package = "jfp-contract", path = "../shared_contract" }
-tokio = { version = "1", features = ["full"] }
+crate_workbench = { path = "../crate_workbench" }

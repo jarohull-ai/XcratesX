@@ -36,7 +36,9 @@ fn send_reply(stdout: &mut io::Stdout, message: JfpMessage) -> bool {
 fn is_valid_target(target: &str) -> bool {
     !target.is_empty()
         && target.len() <= 253
-        && target.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':')
+        && target
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':')
 }
 
 async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
@@ -67,7 +69,8 @@ async fn scan_target(target: String, state: Arc<Mutex<OsintState>>) {
     match result {
         Ok(response) => match response.json::<serde_json::Value>().await {
             Ok(json) => {
-                let formatted = serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string());
+                let formatted =
+                    serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string());
                 guard.scan = ScanState::Finished(formatted);
             }
             Err(err) => {
@@ -97,7 +100,10 @@ fn handle_command(target: &str, state: &mut OsintState) -> JfpMessage {
     state.target = target.to_owned();
     state.scan = ScanState::Scanning;
 
-    JfpMessage::reply("OK", format!("OSINT | Cel zablokowany: {target}. Rozpoczynam skanowanie..."))
+    JfpMessage::reply(
+        "OK",
+        format!("OSINT | Cel zablokowany: {target}. Rozpoczynam skanowanie..."),
+    )
 }
 
 fn handle_tick(state: &OsintState) -> JfpMessage {
@@ -117,10 +123,9 @@ fn handle_tick(state: &OsintState) -> JfpMessage {
             "OK",
             format!("OSINT | Raport dla {}:\n{data}", state.target),
         ),
-        ScanState::Error(err) => JfpMessage::reply(
-            "ERROR",
-            format!("OSINT | Blad dla {}: {err}", state.target),
-        ),
+        ScanState::Error(err) => {
+            JfpMessage::reply("ERROR", format!("OSINT | Blad dla {}: {err}", state.target))
+        }
     }
 }
 

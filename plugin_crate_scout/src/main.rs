@@ -178,7 +178,10 @@ fn format_search_results(response: &ApiResponse, query: &str, sort: SortMode) ->
         out,
         "\nWpisz nazwe crate'a aby zobaczyc szczegoly (np. \"info hound\")"
     );
-    let _ = writeln!(out, "Sortowanie: \"sort dl\" | \"sort rel\" | \"sort recent\" | \"sort new\"");
+    let _ = writeln!(
+        out,
+        "Sortowanie: \"sort dl\" | \"sort rel\" | \"sort recent\" | \"sort new\""
+    );
 
     out
 }
@@ -196,7 +199,11 @@ fn format_detail(resp: &CrateDetailResponse) -> String {
         "  Wersja:     {}",
         c.max_stable_version.as_deref().unwrap_or("?")
     );
-    let _ = writeln!(out, "  Pobrania:   {} (total)", format_downloads(c.downloads));
+    let _ = writeln!(
+        out,
+        "  Pobrania:   {} (total)",
+        format_downloads(c.downloads)
+    );
 
     if let Some(recent) = c.recent_downloads {
         let _ = writeln!(out, "  Ostatnie:   {} (90 dni)", format_downloads(recent));
@@ -219,7 +226,11 @@ fn format_detail(resp: &CrateDetailResponse) -> String {
     }
 
     if !resp.categories.is_empty() {
-        let cats: Vec<&str> = resp.categories.iter().map(|c| c.category.as_str()).collect();
+        let cats: Vec<&str> = resp
+            .categories
+            .iter()
+            .map(|c| c.category.as_str())
+            .collect();
         let _ = writeln!(out, "  Kategorie:  {}", cats.join(", "));
     }
 
@@ -337,7 +348,10 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
         );
     }
 
-    if let Some(name) = input.strip_prefix("info ").or_else(|| input.strip_prefix("INFO ")) {
+    if let Some(name) = input
+        .strip_prefix("info ")
+        .or_else(|| input.strip_prefix("INFO "))
+    {
         let name = name.trim().to_owned();
         return (
             JfpMessage::reply("OK", format!("SCOUT | Pobieram szczegoly: {name}")),
@@ -345,7 +359,10 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
         );
     }
 
-    if let Some(mode) = input.strip_prefix("sort ").or_else(|| input.strip_prefix("SORT ")) {
+    if let Some(mode) = input
+        .strip_prefix("sort ")
+        .or_else(|| input.strip_prefix("SORT "))
+    {
         let mode = mode.trim().to_lowercase();
         state.sort = match mode.as_str() {
             "dl" | "downloads" => SortMode::Downloads,
@@ -367,7 +384,10 @@ fn handle_command(input: &str, state: &mut State) -> (JfpMessage, Command) {
             return (
                 JfpMessage::reply(
                     "OK",
-                    format!("SCOUT | Sortowanie: {}. Wpisz zapytanie.", state.sort.label()),
+                    format!(
+                        "SCOUT | Sortowanie: {}. Wpisz zapytanie.",
+                        state.sort.label()
+                    ),
                 ),
                 Command::None,
             );
@@ -417,16 +437,13 @@ fn handle_tick(state: &State) -> JfpMessage {
              Wpisz fraze (np. \"audio wav\", \"http client async\")\n\
              Komendy: \"info <nazwa>\" | \"sort dl/rel/recent/new\"",
         ),
-        ScoutState::Searching => JfpMessage::reply(
-            "WAIT",
-            format!("SCOUT | Szukam \"{}\"...", state.query),
-        ),
+        ScoutState::Searching => {
+            JfpMessage::reply("WAIT", format!("SCOUT | Szukam \"{}\"...", state.query))
+        }
         ScoutState::Results(data) | ScoutState::Detail(data) => {
             JfpMessage::reply("OK", data.as_str())
         }
-        ScoutState::Error(err) => {
-            JfpMessage::reply("ERROR", format!("SCOUT | {err}"))
-        }
+        ScoutState::Error(err) => JfpMessage::reply("ERROR", format!("SCOUT | {err}")),
     }
 }
 
